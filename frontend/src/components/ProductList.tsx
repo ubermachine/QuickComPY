@@ -4,7 +4,7 @@ import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ImageOff, Search, Tag, Clock } from "lucide-react";
 
-type Service = "blinkit" | "zepto" | "instamart" | "bigbasket";
+type Service = "blinkit" | "zepto" | "instamart" | "bigbasket" | "jiomart";
 
 interface Product {
   id: string;
@@ -50,6 +50,10 @@ export function ProductList({
     bigbasket: {
       badge: "bg-emerald-600",
       price: "text-emerald-600",
+    },
+    jiomart: {
+      badge: "bg-blue-600",
+      price: "text-blue-600",
     },
   };
 

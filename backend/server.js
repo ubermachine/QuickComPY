@@ -10,7 +10,7 @@ const path = require("path");
 require("dotenv").config();
 
 // Define supported services
-const SVCS = ["blinkit", "zepto", "instamart", "bigbasket"];
+const SVCS = ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"];
 
 // Import service helpers dynamically
 const svcHelpers = {};
@@ -54,8 +54,6 @@ const browsers = new Map(); // Keep map for backward compatibility, but we use c
 const pages = new Map();    // Structure: { cid: { svc: page } }
 const locSet = new Map();   // Structure: { cid: { svc: bool } }
 
-const activeBrowsers = browsers;
-const activePages = pages;
 const locationSet = locSet;
 const serviceHelpers = svcHelpers;
 
@@ -183,7 +181,8 @@ async function handleSetLocation(socket, cid, data) {
     !pgs.blinkit ||
     !pgs.zepto ||
     !pgs.instamart ||
-    !pgs.bigbasket
+    !pgs.bigbasket ||
+    !pgs.jiomart
   ) {
     socket.send(
       JSON.stringify({
@@ -212,8 +211,8 @@ async function handleSetLocation(socket, cid, data) {
 
   const servicesToUpdate =
     svcs && Array.isArray(svcs) && svcs.length > 0
-      ? svcs.filter((s) => ["blinkit", "zepto", "instamart", "bigbasket"].includes(s))
-      : ["blinkit", "zepto", "instamart", "bigbasket"];
+      ? svcs.filter((s) => ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"].includes(s))
+      : ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"];
   if (servicesToUpdate.length === 0) {
     socket.send(
       JSON.stringify({
@@ -349,7 +348,7 @@ async function handleSetLocation(socket, cid, data) {
 }
 
 async function handleSearch(ws, clientId, data) {
-  const searchPages = activePages.get(clientId);
+  const searchPages = pages.get(clientId);
   const locationStatus = locationSet.get(clientId) || {};
   SVCS.forEach((svc) => {
     if (locationStatus[svc] === undefined) {
@@ -362,7 +361,8 @@ async function handleSearch(ws, clientId, data) {
     !searchPages.blinkit ||
     !searchPages.zepto ||
     !searchPages.instamart ||
-    !searchPages.bigbasket
+    !searchPages.bigbasket ||
+    !searchPages.jiomart
   ) {
     ws.send(
       JSON.stringify({
@@ -487,6 +487,10 @@ async function handleSearch(ws, clientId, data) {
       let responseHandler;
 
       const productJsonPromise = new Promise((resolve, reject) => {
+        if (service === "jiomart") {
+          resolve({ useHtmlExtraction: true, page: page });
+          return;
+        }
         responseHandler = async (response) => {
           const url = response.url();
           if (
@@ -733,7 +737,7 @@ async function handleSearch(ws, clientId, data) {
 
 async function handleCloseBrowser(ws, clientId, data) {
   // Close all browser contexts / pages if they exist
-  const clientPages = activePages.get(clientId);
+  const clientPages = pages.get(clientId);
   if (clientPages) {
     const closePromises = [];
 
@@ -750,8 +754,8 @@ async function handleCloseBrowser(ws, clientId, data) {
 
     await Promise.all(closePromises);
 
-    activeBrowsers.delete(clientId);
-    activePages.delete(clientId);
+    browsers.delete(clientId);
+    pages.delete(clientId);
     locationSet.delete(clientId);
 
     ws.send(
