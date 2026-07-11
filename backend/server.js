@@ -8,6 +8,7 @@ puppet.use(StealthPlugin());
 const morgan = require("morgan");
 const path = require("path");
 require("dotenv").config();
+const stealthUtils = require("./stealthUtils");
 
 // Define supported services
 const SVCS = ["blinkit", "zepto", "instamart", "bigbasket"];
@@ -76,13 +77,7 @@ async function getGlobalBrowser() {
     try {
       const b = await puppet.launch({
         headless: "new",
-        args: [
-          "--disable-setuid-sandbox",
-          "--no-sandbox",
-          "--no-zygote",
-          "--disable-dev-shm-usage",
-          "--disable-gpu",
-        ],
+        args: stealthUtils.LAUNCH_ARGS,
         executablePath: process.env.PUPPETEER_EXEC_PATH,
       });
 
@@ -856,6 +851,9 @@ async function getPage(cid, svc, context) {
     await p.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     );
+
+    // Apply page-level stealth injections from stealthUtils
+    await stealthUtils.applyPageStealthInjections(p);
 
     // Enable resource interception to block images/media/fonts/trackers
     await enableResourceInterception(p);
