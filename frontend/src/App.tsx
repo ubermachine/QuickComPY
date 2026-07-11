@@ -536,7 +536,7 @@ export default function Home() {
         </div>
 
         {activeService === null ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {Object.entries(services).map(([service, data]) => (
               <div key={service} className="mb-6">
                 <div className="flex items-center justify-between mb-3">
