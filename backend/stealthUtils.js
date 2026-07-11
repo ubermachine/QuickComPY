@@ -41,13 +41,16 @@ async function applyPageStealthInjections(page) {
   // Set consistent viewport and User-Agent
   await page.setViewport({ width: 1280, height: 800 });
   await page.setUserAgent(DEFAULT_USER_AGENT);
-  await page.setExtraHTTPHeaders(DEFAULT_HEADERS);
 
   // Request interception to block non-essential resources for acceleration
   await page.setRequestInterception(true);
   page.on('request', (req) => {
     const resourceType = req.resourceType();
-    if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+    const url = req.url();
+    const isJioMart = url.includes('jiomart') || (page && page.url().includes('jiomart'));
+    const blockTypes = isJioMart ? ['image', 'media', 'font'] : ['image', 'media', 'font', 'stylesheet'];
+
+    if (blockTypes.includes(resourceType)) {
       req.abort().catch(() => {});
     } else {
       req.continue().catch(() => {});

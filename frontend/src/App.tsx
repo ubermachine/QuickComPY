@@ -20,7 +20,7 @@ const getWebsocketUrl = () => {
   return "ws://localhost:5000";
 }
 const WS_URL = getWebsocketUrl();
-type Service = "blinkit" | "zepto" | "instamart" | "bigbasket"
+type Service = "blinkit" | "zepto" | "instamart" | "bigbasket" | "jiomart"
 
 interface Product {
   id: string
@@ -87,6 +87,14 @@ export default function Home() {
       isLoading: false,
       logo: "/src/assets/bigbasket.png",
       color: "emerald"
+    },
+    jiomart: {
+      status: "pending",
+      message: "Ready",
+      products: [],
+      isLoading: false,
+      logo: "/src/assets/jiomart.png",
+      color: "blue"
     }
   })
     const [activeService, setActiveService] = useState<Service | null>(null)
@@ -237,7 +245,7 @@ export default function Home() {
             if (data.action === "serviceSearchUpdate") {
               const { service, status, message } = data
               
-              if (service && ["blinkit", "zepto", "instamart", "bigbasket"].includes(service)) {
+              if (service && ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"].includes(service)) {
                 setServices(prev => ({
                   ...prev,
                   [service]: {
@@ -309,6 +317,15 @@ export default function Home() {
                       isLoading: false,
                       message: data.products.bigbasket?.length > 0 
                         ? `Found ${data.products.bigbasket.length} products` 
+                        : "No products found"
+                    },
+                    jiomart: {
+                      ...prev.jiomart,
+                      products: data.products.jiomart || [],
+                      status: data.products.jiomart?.length > 0 ? "success" : "empty",
+                      isLoading: false,
+                      message: data.products.jiomart?.length > 0
+                        ? `Found ${data.products.jiomart.length} products`
                         : "No products found"
                     }
                   }))
@@ -405,7 +422,8 @@ export default function Home() {
         blinkit: { ...prev.blinkit, status: "loading", isLoading: true, message: "Searching..." },
         zepto: { ...prev.zepto, status: "loading", isLoading: true, message: "Searching..." },
         instamart: { ...prev.instamart, status: "loading", isLoading: true, message: "Searching..." },
-        bigbasket: { ...prev.bigbasket, status: "loading", isLoading: true, message: "Searching..." }
+        bigbasket: { ...prev.bigbasket, status: "loading", isLoading: true, message: "Searching..." },
+        jiomart: { ...prev.jiomart, status: "loading", isLoading: true, message: "Searching..." }
       }))
       
       setIsLoadingSearch(true)
@@ -481,6 +499,7 @@ export default function Home() {
                 data.color === "purple" ? "border-b-2 border-purple-500 text-purple-600 font-semibold" :
                 data.color === "orange" ? "border-b-2 border-orange-500 text-orange-600 font-semibold" :
                 data.color === "emerald" ? "border-b-2 border-emerald-500 text-emerald-600 font-semibold" :
+                data.color === "blue" ? "border-b-2 border-blue-500 text-blue-600 font-semibold" :
                 "border-b-2 border-yellow-500 text-yellow-600 font-semibold";
 
               return (
