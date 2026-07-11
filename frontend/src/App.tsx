@@ -187,14 +187,14 @@ export default function Home() {
                         color: 'white',
                       }
                   })
-                  // Automatically trigger location setting for default 'SUPERTECH ECO VILLAGE-1'
+                  // Automatically trigger location setting for default '201306'
                   if (ws.current && ws.current.readyState === WebSocket.OPEN) {
                     setIsLoadingLocation(true)
-                    setLoadingMessage("Setting default location to SUPERTECH ECO VILLAGE-1...")
+                    setLoadingMessage("Setting default location to 201306...")
                     ws.current.send(
                       JSON.stringify({
                         action: "setLocation",
-                        location: "SUPERTECH ECO VILLAGE-1",
+                        location: "201306",
                       })
                     )
                   }

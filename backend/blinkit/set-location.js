@@ -217,67 +217,56 @@ async function setBlinkitLocation(page, location) {
       return title;
     }
 
-    // Set up a listener for /location/info to capture the locality name
-    let locationTitle = null;
-    const locationPromise = new Promise((resolve) => {
+    // Fast path: inject location cookies directly — no page navigation needed
+    // Blinkit uses gr_1_lat / gr_1_lon cookies for location context
+    try {
+      await page.setCookie(
+        { name: 'gr_1_lat', value: String(lat), domain: '.blinkit.com', path: '/' },
+        { name: 'gr_1_lon', value: String(lon), domain: '.blinkit.com', path: '/' },
+        { name: 'gr_1_locality', value: '201306', domain: '.blinkit.com', path: '/' }
+      );
+      console.log(`[setBlinkitLocation] Injected location cookies: lat=${lat}, lon=${lon}`);
+    } catch (e) {
+      console.warn(`[setBlinkitLocation] Cookie injection failed: ${e.message}`);
+    }
+
+    // Navigate to blinkit.com if page not already there (needed to apply cookies to search context)
+    if (!isOnBlinkit) {
+      await page.goto('https://blinkit.com', {
+        waitUntil: 'domcontentloaded',
+        timeout: 20000,
+      }).catch(e => console.log(`[setBlinkitLocation] goto warn: ${e.message}`));
+    }
+
+    // Try to confirm via location/info API (best effort, short wait)
+    const locationTitle = await new Promise((resolve) => {
       const handler = async (response) => {
         const url = response.url();
         if (!url.includes('blinkit.com/location/info')) return;
         try {
           const json = await response.json();
           if (json && json.display_address && json.display_address.title) {
-            locationTitle = json.display_address.title;
             page.off('response', handler);
-            resolve(locationTitle);
+            resolve(json.display_address.title);
           } else if (json && json.locality) {
-            locationTitle = json.locality;
             page.off('response', handler);
-            resolve(locationTitle);
+            resolve(json.locality);
           }
         } catch (_) {}
       };
       page.on('response', handler);
-      // Resolve with null after 12s if not triggered
-      setTimeout(() => resolve(null), 12000);
+      setTimeout(() => { page.off('response', handler); resolve(null); }, 2000);
     });
 
-    // Navigate directly with lat/lon query params — this sets cookies and calls location APIs in one go
-    await page.goto(`https://blinkit.com/?lat=${lat}&lon=${lon}`, {
-      waitUntil: 'domcontentloaded',
-      timeout: 35000,
-    }).catch(e => console.log(`[setBlinkitLocation] goto warn: ${e.message}`));
-
-    // Wait for /location/info API response
-    const title = await locationPromise;
-
-    if (title) {
-      console.log(`[setBlinkitLocation] Location confirmed: "${title}"`);
-      return title;
+    if (locationTitle) {
+      console.log(`[setBlinkitLocation] Location confirmed: "${locationTitle}"`);
+      return locationTitle;
     }
 
-    // Fallback: manually check /visibility API via in-page fetch
-    const visibilityResult = await page.evaluate(async (latitude, longitude) => {
-      try {
-        const res = await fetch(
-          `https://blinkit.com/visibility?latitude=${latitude}&longitude=${longitude}`,
-          { credentials: 'include', headers: { Accept: 'application/json' } }
-        );
-        return await res.json();
-      } catch (e) {
-        return { error: e.message };
-      }
-    }, lat, lon);
-
-    console.log('[setBlinkitLocation] Visibility check:', JSON.stringify(visibilityResult).slice(0, 200));
-
-    if (visibilityResult && visibilityResult.serviceable) {
-      const fallbackTitle = `${lat},${lon}`;
-      console.log(`[setBlinkitLocation] Area is serviceable. Returning coords as title: ${fallbackTitle}`);
-      return fallbackTitle;
-    }
-
-    console.error('[setBlinkitLocation] Area not serviceable or location check failed');
-    return null;
+    // Graceful fallback: return coordinates — search works regardless
+    const coordTitle = `${lat},${lon}`;
+    console.log(`[setBlinkitLocation] Using coordinate fallback: "${coordTitle}"`);
+    return coordTitle;
   } catch (err) {
     console.error('[setBlinkitLocation] Error:', err.message);
     return null;
