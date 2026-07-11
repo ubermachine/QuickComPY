@@ -17,26 +17,18 @@ async function navigateToSearch(page, searchTerm) {
 
 async function ensureContentLoaded(page) {
   try {
-    // Wait for either the product cards or the empty search page to appear
+    // Wait for either the product cards or the empty search page to appear simultaneously
     const selectors = [
       'li[class*="PaginateItems"]',
       'div[class*="ProductTemplate"]',
       'div[class*="ColStyled"]',
       'input[placeholder="Search for Products..."]'
     ];
-
-    let found = false;
-    for (const sel of selectors) {
-      try {
-        await page.waitForSelector(sel, { timeout: 5000 });
-        console.log(`Found Bigbasket content selector: ${sel}`);
-        found = true;
-        break;
-      } catch (e) {
-        // Try next
-      }
-    }
-    return found;
+    
+    const combinedSelector = selectors.join(', ');
+    await page.waitForSelector(combinedSelector, { timeout: 5000 });
+    console.log("Found Bigbasket content selector via combined query");
+    return true;
   } catch (err) {
     console.log(`Error waiting for Bigbasket content: ${err.message}`);
     return true;

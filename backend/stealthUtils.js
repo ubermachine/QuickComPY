@@ -21,8 +21,6 @@ const DEFAULT_HEADERS = {
 const LAUNCH_ARGS = [
   '--disable-setuid-sandbox',
   '--no-sandbox',
-  '--single-process',
-  '--no-zygote',
   '--disable-blink-features=AutomationControlled',
   '--disable-infobars',
   '--window-size=1280,800',

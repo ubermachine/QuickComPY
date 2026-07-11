@@ -41,6 +41,7 @@ const LOCATION_COORDS = {
   'gurugram': { lat: 28.4595, lon: 77.0266 },
   'noida': { lat: 28.5355, lon: 77.3910 },
   'jaipur': { lat: 26.9124, lon: 75.7873 },
+  '201306': { lat: 28.5147, lon: 77.4855 },
 };
 
 function resolveCoords(location) {
@@ -68,25 +69,16 @@ function resolveCoords(location) {
 async function setBlinkitLocation(page, location) {
   console.log(`[setBlinkitLocation] Setting location to: ${JSON.stringify(location)}`);
 
-  const coords = resolveCoords(location);
+  let coords = resolveCoords(location);
   if (!coords) {
-    console.error(`[setBlinkitLocation] Could not resolve coordinates for: ${location}`);
-    return null;
+    console.warn(`[setBlinkitLocation] Could not resolve coordinates for: ${location}. Falling back to default Noida coordinates.`);
+    coords = LOCATION_COORDS['201306'];
   }
 
   const { lat, lon } = coords;
   console.log(`[setBlinkitLocation] Using coordinates: lat=${lat}, lon=${lon}`);
 
   try {
-    // Ensure we are on blinkit.com
-    if (!page.url().includes('blinkit.com')) {
-      await page.goto('https://blinkit.com/', {
-        waitUntil: 'domcontentloaded',
-        timeout: 60000,
-      });
-      await delay(2000);
-    }
-
     // Set up a listener for /location/info to capture the locality name
     let locationTitle = null;
     const locationPromise = new Promise((resolve) => {
@@ -107,17 +99,14 @@ async function setBlinkitLocation(page, location) {
         } catch (_) {}
       };
       page.on('response', handler);
-      // Resolve with null after 10s if not triggered
-      setTimeout(() => resolve(null), 10000);
+      // Resolve with null after 12s if not triggered
+      setTimeout(() => resolve(null), 12000);
     });
 
-    // Navigate with lat/lon query params — this causes the site to:
-    // 1. Set gr_1_lat, gr_1_lon cookies
-    // 2. Call /visibility, /location/info APIs automatically
-    // 3. Update the location bar
+    // Navigate directly with lat/lon query params — this sets cookies and calls location APIs in one go
     await page.goto(`https://blinkit.com/?lat=${lat}&lon=${lon}`, {
       waitUntil: 'domcontentloaded',
-      timeout: 30000,
+      timeout: 35000,
     }).catch(e => console.log(`[setBlinkitLocation] goto warn: ${e.message}`));
 
     // Wait for /location/info API response

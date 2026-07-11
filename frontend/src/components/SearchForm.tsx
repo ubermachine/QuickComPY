@@ -27,7 +27,7 @@ export function SearchForm({
   isLocationSet,
   currentLocation, 
 }: SearchFormProps) {
-  const [locationInput, setLocationInput] = useState("")
+  const [locationInput, setLocationInput] = useState("201306")
   const [searchInput, setSearchInput] = useState("")
 
   const handleSetLocationSubmit = (e: React.FormEvent) => {

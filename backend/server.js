@@ -10,7 +10,7 @@ const path = require("path");
 require("dotenv").config();
 
 // Define supported services
-const SVCS = ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"];
+const SVCS = ["blinkit", /* "zepto", "instamart", */ "bigbasket", "jiomart"];
 
 // Import service helpers dynamically
 const svcHelpers = {};
@@ -178,11 +178,7 @@ async function handleSetLocation(socket, cid, data) {
   
   if (
     !pgs ||
-    !pgs.blinkit ||
-    !pgs.zepto ||
-    !pgs.instamart ||
-    !pgs.bigbasket ||
-    !pgs.jiomart
+    SVCS.some(svc => !pgs[svc])
   ) {
     socket.send(
       JSON.stringify({
@@ -211,8 +207,8 @@ async function handleSetLocation(socket, cid, data) {
 
   const servicesToUpdate =
     svcs && Array.isArray(svcs) && svcs.length > 0
-      ? svcs.filter((s) => ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"].includes(s))
-      : ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"];
+      ? svcs.filter((s) => SVCS.includes(s))
+      : SVCS;
   if (servicesToUpdate.length === 0) {
     socket.send(
       JSON.stringify({
@@ -358,11 +354,7 @@ async function handleSearch(ws, clientId, data) {
 
   if (
     !searchPages ||
-    !searchPages.blinkit ||
-    !searchPages.zepto ||
-    !searchPages.instamart ||
-    !searchPages.bigbasket ||
-    !searchPages.jiomart
+    SVCS.some(svc => !searchPages[svc])
   ) {
     ws.send(
       JSON.stringify({
@@ -454,6 +446,7 @@ async function handleSearch(ws, clientId, data) {
         status,
         message,
         hasProducts: products ? products.length > 0 : false,
+        products: products || [],
       })
     );
   };
@@ -482,100 +475,125 @@ async function handleSearch(ws, clientId, data) {
     );
 
     try {
-      // Promise to capture product JSON from network responses
-      let productJsonResponse = null;
-      let responseHandler;
-
-      const productJsonPromise = new Promise((resolve, reject) => {
-        if (service === "jiomart") {
-          resolve({ useHtmlExtraction: true, page: page });
-          return;
-        }
-        responseHandler = async (response) => {
-          const url = response.url();
-          if (
-            response.request().resourceType() === "xhr" ||
-            response.request().resourceType() === "fetch"
-          ) {
-            try {
-              const json = await response.json(); // Check for product data format specific to this service, avoiding empty_search URLs
-              const isBlinkitJson = service === "blinkit" && json && json.response && Array.isArray(json.response.snippets);
-              const isBigbasketJson = service === "bigbasket" && json && json.tabs && Array.isArray(json.tabs) && json.tabs[0] && json.tabs[0].product_info;
-              // Zepto: POST /user-search-service/api/v3/search → { layout: [...] }
-              const isZeptoJson = service === "zepto" && json && Array.isArray(json.layout) && json.layout.length > 0 &&
-                url.includes("user-search-service") && url.includes("/search");
-              // Instamart: response.snippets (same as blinkit-style)
-              const isInstamartJson = service === "instamart" && json && json.response && Array.isArray(json.response.snippets);
-
-              if ((isBlinkitJson || isBigbasketJson || isZeptoJson || isInstamartJson) && !url.includes("empty_search")) {
-                console.log(
-                  `Captured ${service} product JSON from: ${url}`
-                );
-                if (page && typeof page.off === "function")
-                  page.off("response", responseHandler);
-                resolve(json);
-              }
-            } catch (e) {
-              // Not a JSON response or not the one we want
-            }
-          }
-        };
-
-        page.on("response", responseHandler);
-
-        // Timeout to prevent hanging
-        setTimeout(() => {
-          if (page && typeof page.off === "function")
-            page.off("response", responseHandler);
-          // Instead of rejecting with error, resolve with a marker to use HTML extraction
-          resolve({ useHtmlExtraction: true, page: page });
-        }, 30000);
-      });
-
       // Navigate to the search page
       updateSearchStatus(
         service,
         "navigating",
         `Navigating to ${service} search...`
       );
-      const navigationSuccess = await navigateToSearch(
-        page,
-        searchTerm
-      );
 
-      if (!navigationSuccess) {
+      let productJsonResponse = null;
+
+      if (service === "jiomart") {
+        const navigationSuccess = await navigateToSearch(page, searchTerm);
+        if (!navigationSuccess) {
+          updateSearchStatus(
+            service,
+            "error",
+            `Failed to navigate to ${service} search page.`
+          );
+          return [];
+        }
+
         updateSearchStatus(
           service,
-          "error",
-          `Failed to navigate to ${service} search page.`
+          "loading_content",
+          `Waiting for ${service} content to load...`
         );
-        if (page && typeof page.off === "function" && responseHandler)
+        await ensureContentLoaded(page);
+        productJsonResponse = { useHtmlExtraction: true, page: page };
+      } else {
+        // Blinkit & Bigbasket: Setup response listener
+        let responseHandler;
+        const jsonCapturePromise = new Promise((resolve) => {
+          responseHandler = async (response) => {
+            const url = response.url();
+            const isBlinkitUrl = service === "blinkit" && url.includes("blinkit.com/v1/layout/search");
+            const isBigbasketUrl = service === "bigbasket" && url.includes("bigbasket.com/listing-svc/v2/products");
+            
+            if (!isBlinkitUrl && !isBigbasketUrl) return;
+
+            if (isBlinkitUrl) {
+              console.log(`[debug-ws-response] Found blinkit search URL: ${url}`);
+            }
+
+            try {
+              const json = await response.json();
+              const isBlinkitJson = service === "blinkit" && json && json.response && Array.isArray(json.response.snippets);
+              const isBigbasketJson = service === "bigbasket" && json && json.tabs && Array.isArray(json.tabs) && json.tabs[0] && json.tabs[0].product_info;
+
+              if (isBlinkitUrl) {
+                console.log(`[debug-ws-response] isBlinkitJson: ${isBlinkitJson}, hasSnippets: ${json && json.response && Array.isArray(json.response.snippets)}`);
+              }
+
+              if ((isBlinkitJson || isBigbasketJson) && !url.includes("empty_search")) {
+                console.log(`Captured ${service} product JSON from: ${url}`);
+                resolve(json);
+              }
+            } catch (e) {
+              if (isBlinkitUrl) {
+                console.log(`[debug-ws-response] Error parsing json for blinkit: ${e.message}`);
+              }
+            }
+          };
+          page.on("response", responseHandler);
+        });
+
+        // Navigate page
+        const navigationSuccess = await navigateToSearch(page, searchTerm);
+        if (!navigationSuccess) {
+          if (page && typeof page.off === "function" && responseHandler) {
+            page.off("response", responseHandler);
+          }
+          updateSearchStatus(
+            service,
+            "error",
+            `Failed to navigate to ${service} search page.`
+          );
+          return [];
+        }
+
+        // Race the JSON capture against a 30s timeout
+        const timeoutPromise = new Promise((resolve) => setTimeout(() => resolve({ timeout: true }), 30000));
+        const result = await Promise.race([jsonCapturePromise, timeoutPromise]);
+
+        // Cleanup response listener immediately to prevent leaks
+        if (page && typeof page.off === "function" && responseHandler) {
           page.off("response", responseHandler);
-        return [];
+        }
+
+        if (result && result.timeout) {
+          console.warn(`[runServiceSearch] Timeout waiting for ${service} JSON response.`);
+          updateSearchStatus(service, "empty", `No products found on ${service} (Timeout).`);
+          return [];
+        }
+
+        productJsonResponse = result;
       }
 
-      // Wait for content to load
-      updateSearchStatus(
-        service,
-        "loading_content",
-        `Waiting for ${service} content to load...`
-      );
-      const contentLoaded = await ensureContentLoaded(page);
-
-      // Extract product information - first try from JSON, fallback to HTML if needed
-      updateSearchStatus(
-        service,
-        "extracting",
-        `Extracting ${service} products...`
-      );
-      try {
-        productJsonResponse = await productJsonPromise;
+        // Extract product information - first try from JSON, fallback to HTML if needed
+        updateSearchStatus(
+          service,
+          "extracting",
+          `Extracting ${service} products...`
+        );
+        try {
 
         if (
           productJsonResponse &&
           productJsonResponse.useHtmlExtraction
         ) {
           console.log(`Using HTML extraction for ${service}`);
+          try {
+            const pageTitle = await page.title();
+            const pageUrl = page.url();
+            console.log(`[debug-fallback] Service: ${service}, URL: ${pageUrl}, Title: ${pageTitle}`);
+            if (pageTitle.includes("Cloudflare") || pageTitle.includes("Just a moment")) {
+              console.warn(`[debug-fallback] Cloudflare bot detection triggered for ${service}!`);
+            }
+          } catch (err) {
+            console.log(`[debug-fallback] Error getting page info: ${err.message}`);
+          }
           updateSearchStatus(
             service,
             "extracting",
@@ -584,7 +602,7 @@ async function handleSearch(ws, clientId, data) {
         }
 
         // Pass the response with page object to the extraction function
-        if (productJsonResponse.useHtmlExtraction) {
+        if (productJsonResponse && productJsonResponse.useHtmlExtraction) {
           productJsonResponse.page = page;
         }
 
@@ -813,14 +831,10 @@ async function getPage(cid, svc, browser) {
       return pages.get(cid)[svc];
     }
 
-    // Create a lightweight, isolated browser context for each client session
-    console.log(`Creating lightweight, isolated browser context for client ${cid} - ${svc}...`);
-    const context = await browser.createBrowserContext();
-    const p = await context.newPage();
+    // Create page in default browser context to ensure stealth plugin evasions are fully active
+    console.log(`Creating page for client ${cid} - ${svc} in default browser context...`);
+    const p = await browser.newPage();
     await stealthUtils.applyPageStealthInjections(p);
-
-    // Keep reference to the context so we can close it properly
-    p._clientContext = context;
 
     // Store page reference
     pages.get(cid)[svc] = p;

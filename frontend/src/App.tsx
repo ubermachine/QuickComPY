@@ -20,7 +20,7 @@ const getWebsocketUrl = () => {
   return "ws://localhost:5000";
 }
 const WS_URL = getWebsocketUrl();
-type Service = "blinkit" | "zepto" | "instamart" | "bigbasket" | "jiomart"
+type Service = "blinkit" | "bigbasket" | "jiomart" // | "zepto" | "instamart"
 
 interface Product {
   id: string
@@ -64,6 +64,7 @@ export default function Home() {
       logo: "/src/assets/blinkit.png",
       color: "green"
     },
+    /*
     zepto: {
       status: "pending",
       message: "Ready",
@@ -80,6 +81,7 @@ export default function Home() {
       logo: "/src/assets/instamart.png",
       color: "orange"
     },
+    */
     bigbasket: {
       status: "pending",
       message: "Ready",
@@ -185,6 +187,17 @@ export default function Home() {
                         color: 'white',
                       }
                   })
+                  // Automatically trigger location setting for default '201306'
+                  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                    setIsLoadingLocation(true)
+                    setLoadingMessage("Setting default location to 201306...")
+                    ws.current.send(
+                      JSON.stringify({
+                        action: "setLocation",
+                        location: "201306",
+                      })
+                    )
+                  }
                 } else if (data.status === "error") {
                   setError(data.message || "Failed to initialize browsers.")
                   toast.error(data.message || "Browser init failed.", { icon: "🙁" })
@@ -245,13 +258,14 @@ export default function Home() {
             if (data.action === "serviceSearchUpdate") {
               const { service, status, message } = data
               
-              if (service && ["blinkit", "zepto", "instamart", "bigbasket", "jiomart"].includes(service)) {
+              if (service && ["blinkit", "bigbasket", "jiomart"].includes(service)) {
                 setServices(prev => ({
                   ...prev,
                   [service]: {
                     ...prev[service as Service],
                     status: status as ServiceStatus,
                     message: message || prev[service as Service].message,
+                    products: data.products && data.products.length > 0 ? data.products : prev[service as Service].products,
                     isLoading: status === "loading" || status === "navigating" || status === "extracting"
                   }
                 }))
@@ -292,6 +306,7 @@ export default function Home() {
                         ? `Found ${data.products.blinkit.length} products` 
                         : "No products found"
                     },
+                    /*
                     zepto: {
                       ...prev.zepto,
                       products: data.products.zepto || [],
@@ -310,6 +325,7 @@ export default function Home() {
                         ? `Found ${data.products.instamart.length} products` 
                         : "No products found"
                     },
+                    */
                     bigbasket: {
                       ...prev.bigbasket,
                       products: data.products.bigbasket || [],
@@ -419,11 +435,11 @@ export default function Home() {
 
     try {
       setServices(prev => ({
-        blinkit: { ...prev.blinkit, status: "loading", isLoading: true, message: "Searching..." },
-        zepto: { ...prev.zepto, status: "loading", isLoading: true, message: "Searching..." },
-        instamart: { ...prev.instamart, status: "loading", isLoading: true, message: "Searching..." },
-        bigbasket: { ...prev.bigbasket, status: "loading", isLoading: true, message: "Searching..." },
-        jiomart: { ...prev.jiomart, status: "loading", isLoading: true, message: "Searching..." }
+        blinkit: { ...prev.blinkit, status: "loading", isLoading: true, message: "Searching...", products: [] },
+        // zepto: { ...prev.zepto, status: "loading", isLoading: true, message: "Searching...", products: [] },
+        // instamart: { ...prev.instamart, status: "loading", isLoading: true, message: "Searching...", products: [] },
+        bigbasket: { ...prev.bigbasket, status: "loading", isLoading: true, message: "Searching...", products: [] },
+        jiomart: { ...prev.jiomart, status: "loading", isLoading: true, message: "Searching...", products: [] }
       }))
       
       setIsLoadingSearch(true)
