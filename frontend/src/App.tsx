@@ -235,7 +235,7 @@ export default function Home() {
               return
             }
             if (data.action === "serviceSearchUpdate") {
-              const { service, status, message } = data
+              const { service, status, message, products } = data
               
               if (service && ["blinkit", "zepto", "instamart", "bigbasket"].includes(service)) {
                 setServices(prev => ({
@@ -244,6 +244,7 @@ export default function Home() {
                     ...prev[service as Service],
                     status: status as ServiceStatus,
                     message: message || prev[service as Service].message,
+                    products: products || prev[service as Service].products,
                     isLoading: status === "loading" || status === "navigating" || status === "extracting"
                   }
                 }))

@@ -47,14 +47,90 @@ app.get("/api/health", (req, res) => {
 });
 
 // Client tracking maps
-const browsers = new Map(); // Structure: { cid: { svc: browser } }
+const contexts = new Map(); // Structure: { cid: BrowserContext }
 const pages = new Map();    // Structure: { cid: { svc: page } }
 const locSet = new Map();   // Structure: { cid: { svc: bool } }
 
-const activeBrowsers = browsers;
 const activePages = pages;
 const locationSet = locSet;
 const serviceHelpers = svcHelpers;
+
+let globalBrowserPromise = null;
+
+// Lazily initialize/get the global browser instance with a single concurrency-safe promise
+async function getGlobalBrowser() {
+  if (globalBrowserPromise) {
+    try {
+      const browser = await globalBrowserPromise;
+      if (browser.connected) {
+        return browser;
+      }
+    } catch (e) {
+      // If the promise failed previously, we will reset and try launching again
+    }
+    globalBrowserPromise = null;
+  }
+
+  console.log("Launching global Puppeteer browser...");
+  globalBrowserPromise = (async () => {
+    try {
+      const b = await puppet.launch({
+        headless: "new",
+        args: [
+          "--disable-setuid-sandbox",
+          "--no-sandbox",
+          "--no-zygote",
+          "--disable-dev-shm-usage",
+          "--disable-gpu",
+        ],
+        executablePath: process.env.PUPPETEER_EXEC_PATH,
+      });
+
+      b.on("disconnected", () => {
+        console.log("Global browser disconnected.");
+        globalBrowserPromise = null;
+      });
+
+      return b;
+    } catch (err) {
+      console.error("Failed to launch global browser:", err);
+      globalBrowserPromise = null;
+      throw err;
+    }
+  })();
+
+  return globalBrowserPromise;
+}
+
+// Enable resource interception to block images, media, fonts, and trackers
+async function enableResourceInterception(page) {
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const resourceType = req.resourceType();
+    const url = req.url().toLowerCase();
+
+    // Block non-essential heavy assets
+    const isBlockedType = ['image', 'media', 'font'].includes(resourceType);
+
+    // Block tracking/ads analytics
+    const isAnalyticsOrAd =
+      url.includes('google-analytics') ||
+      url.includes('mixpanel') ||
+      url.includes('segment') ||
+      url.includes('hotjar') ||
+      url.includes('facebook') ||
+      url.includes('doubleclick') ||
+      url.includes('sentry') ||
+      url.includes('datadog') ||
+      url.includes('fullstory');
+
+    if (isBlockedType || isAnalyticsOrAd) {
+      req.abort();
+    } else {
+      req.continue();
+    }
+  });
+}
 
 // WebSocket connection handler
 wss.on("connection", (socket) => {
@@ -62,7 +138,7 @@ wss.on("connection", (socket) => {
   console.log(`Client connected: ${cid}`);
 
   // Initialize client tracking
-  browsers.set(cid, {});
+  contexts.set(cid, null);
   pages.set(cid, {});
   locSet.set(cid, {});
 
@@ -131,11 +207,13 @@ async function handleInitialize(ws, clientId, data) {
   );
 
   try {
-    // Launch all browsers in parallel
+    // Get/Launch global browser and create a single context for this client
+    const context = await initContext(clientId);
+
+    // Create all pages in parallel inside this context
     await Promise.all(
       SVCS.map(async (svc) => {
-        const browser = await initBrowser(clientId, svc);
-        await getPage(clientId, svc, browser);
+        await getPage(clientId, svc, context);
       })
     );
 
@@ -175,12 +253,8 @@ async function handleSetLocation(socket, cid, data) {
   const pgs = pages.get(cid);
   const clientPages = pgs;
   
-  if (
-    !pgs ||
-    !pgs.blinkit ||
-    !pgs.zepto ||
-    !pgs.instamart
-  ) {
+  const allServicesInitialized = pgs && SVCS.every((svc) => pgs[svc]);
+  if (!allServicesInitialized) {
     socket.send(
       JSON.stringify({
         action: "statusUpdate",
@@ -208,8 +282,8 @@ async function handleSetLocation(socket, cid, data) {
 
   const servicesToUpdate =
     svcs && Array.isArray(svcs) && svcs.length > 0
-      ? svcs.filter((s) => ["blinkit", "zepto", "instamart"].includes(s))
-      : ["blinkit", "zepto", "instamart"];
+      ? svcs.filter((s) => SVCS.includes(s))
+      : SVCS;
   if (servicesToUpdate.length === 0) {
     socket.send(
       JSON.stringify({
@@ -229,7 +303,7 @@ async function handleSetLocation(socket, cid, data) {
       step: "setLocation",
       status: "loading",
       message:
-        servicesToUpdate.length === 3
+        servicesToUpdate.length === SVCS.length
           ? `Setting location to ${location} on all services...`
           : `Setting location to ${location} on ${servicesToUpdate.join(
               ", "
@@ -353,12 +427,8 @@ async function handleSearch(ws, clientId, data) {
     }
   });
 
-  if (
-    !searchPages ||
-    !searchPages.blinkit ||
-    !searchPages.zepto ||
-    !searchPages.instamart
-  ) {
+  const allSearchPagesInitialized = searchPages && SVCS.every((svc) => searchPages[svc]);
+  if (!allSearchPagesInitialized) {
     ws.send(
       JSON.stringify({
         action: "statusUpdate",
@@ -449,6 +519,7 @@ async function handleSearch(ws, clientId, data) {
         status,
         message,
         hasProducts: products ? products.length > 0 : false,
+        products: products, // Stream products directly to frontend
       })
     );
   };
@@ -727,21 +798,11 @@ async function handleSearch(ws, clientId, data) {
 }
 
 async function handleCloseBrowser(ws, clientId, data) {
-  // Close all browsers if they exist
-  const clientBrowsers = activeBrowsers.get(clientId);
-  if (clientBrowsers) {
-    const closePromises = [];
-
-    for (const service of SVCS) {
-      if (clientBrowsers[service]) {
-        closePromises.push(clientBrowsers[service].close());
-      }
-    }
-
-    await Promise.all(closePromises);
-
-    activeBrowsers.delete(clientId);
-    activePages.delete(clientId);
+  const context = contexts.get(clientId);
+  if (context) {
+    await context.close();
+    contexts.delete(clientId);
+    pages.delete(clientId);
     locationSet.delete(clientId);
 
     ws.send(
@@ -763,47 +824,41 @@ async function handleCloseBrowser(ws, clientId, data) {
 }
 
 // Browser management functions
-async function initBrowser(cid, svc) {
+async function initContext(cid) {
   try {
-    // Check if browser already exists for this client/service
-    if (browsers.get(cid)[svc]) {
-      return browsers.get(cid)[svc];
+    if (contexts.has(cid) && contexts.get(cid)) {
+      return contexts.get(cid);
     }
 
-    // Launch browser with appropriate settings
-    const b = await puppet.launch({
-      headless: "new",
-      args: [
-        "--disable-setuid-sandbox",
-        "--no-sandbox",
-        "--single-process",
-        "--no-zygote",
-      ],
-      executablePath: process.env.PUPPETEER_EXEC_PATH,
-    });
-
-    // Store browser reference
-    browsers.get(cid)[svc] = b;
-    return b;
+    const browser = await getGlobalBrowser();
+    const context = await browser.createBrowserContext();
+    contexts.set(cid, context);
+    return context;
   } catch (err) {
-    console.error(`Error initializing browser for ${svc}:`, err);
-    throw new Error(`Failed to initialize browser: ${err.message}`);
+    console.error(`Error initializing browser context for client ${cid}:`, err);
+    throw new Error(`Failed to initialize browser context: ${err.message}`);
   }
 }
 
-async function getPage(cid, svc, browser) {
+async function getPage(cid, svc, context) {
   try {
+    if (!pages.get(cid)) {
+      pages.set(cid, {});
+    }
     // Check if page already exists
     if (pages.get(cid)[svc]) {
       return pages.get(cid)[svc];
     }
 
-    // Create new page with appropriate settings
-    const p = await browser.newPage();
+    // Create new page inside client context
+    const p = await context.newPage();
     await p.setViewport({ width: 1280, height: 800 });
     await p.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     );
+
+    // Enable resource interception to block images/media/fonts/trackers
+    await enableResourceInterception(p);
 
     // Store page reference
     pages.get(cid)[svc] = p;
@@ -816,19 +871,14 @@ async function getPage(cid, svc, browser) {
 
 async function cleanup(cid) {
   try {
-    const clientBrowsers = browsers.get(cid);
-    if (clientBrowsers) {
-      // Close all browsers for this client
-      for (const svc of SVCS) {
-        if (clientBrowsers[svc]) {
-          await clientBrowsers[svc].close();
-          console.log(`Closed ${svc} browser for client ${cid}`);
-        }
-      }
+    const context = contexts.get(cid);
+    if (context) {
+      await context.close();
+      console.log(`Closed browser context for client ${cid}`);
     }
 
     // Clear all client references
-    browsers.delete(cid);
+    contexts.delete(cid);
     pages.delete(cid);
     locSet.delete(cid);
   } catch (err) {
@@ -870,9 +920,18 @@ srv.listen(PORT, () => {
 process.on("SIGINT", async () => {
   console.log("Shutting down server...");
   
-  // Close all active browsers
-  for (const [cid] of browsers.entries()) {
+  // Close all active contexts
+  for (const [cid] of contexts.entries()) {
     await cleanup(cid);
+  }
+
+  // Close the global browser
+  if (globalBrowserPromise) {
+    try {
+      const browser = await globalBrowserPromise;
+      await browser.close();
+      console.log("Global browser closed.");
+    } catch (e) {}
   }
   
   // Close server
