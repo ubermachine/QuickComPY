@@ -43,6 +43,17 @@ async function applyPageStealthInjections(page) {
   await page.setUserAgent(DEFAULT_USER_AGENT);
   await page.setExtraHTTPHeaders(DEFAULT_HEADERS);
 
+  // Request interception to block non-essential resources for acceleration
+  await page.setRequestInterception(true);
+  page.on('request', (req) => {
+    const resourceType = req.resourceType();
+    if (['image', 'media', 'font', 'stylesheet'].includes(resourceType)) {
+      req.abort().catch(() => {});
+    } else {
+      req.continue().catch(() => {});
+    }
+  });
+
   // Inject in-page evasion logic
   await page.evaluateOnNewDocument(() => {
     // 1. Hide Webdriver property completely
