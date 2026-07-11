@@ -762,6 +762,8 @@ async function handleCloseBrowser(ws, clientId, data) {
   }
 }
 
+const stealthUtils = require("./stealthUtils");
+
 // Browser management functions
 async function initBrowser(cid, svc) {
   try {
@@ -773,12 +775,7 @@ async function initBrowser(cid, svc) {
     // Launch browser with appropriate settings
     const b = await puppet.launch({
       headless: "new",
-      args: [
-        "--disable-setuid-sandbox",
-        "--no-sandbox",
-        "--single-process",
-        "--no-zygote",
-      ],
+      args: stealthUtils.LAUNCH_ARGS,
       executablePath: process.env.PUPPETEER_EXEC_PATH,
     });
 
@@ -800,10 +797,7 @@ async function getPage(cid, svc, browser) {
 
     // Create new page with appropriate settings
     const p = await browser.newPage();
-    await p.setViewport({ width: 1280, height: 800 });
-    await p.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-    );
+    await stealthUtils.applyPageStealthInjections(p);
 
     // Store page reference
     pages.get(cid)[svc] = p;
