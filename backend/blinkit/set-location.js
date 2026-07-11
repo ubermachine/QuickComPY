@@ -43,6 +43,9 @@ const LOCATION_COORDS = {
   'jaipur': { lat: 26.9124, lon: 75.7873 },
   '201306': { lat: 28.5147, lon: 77.4855 },
   'supertech ecovillage 1': { lat: 28.5147, lon: 77.4855 },
+  'supertech ecovillage-1': { lat: 28.5147, lon: 77.4855 },
+  'supertech eco village 1': { lat: 28.5147, lon: 77.4855 },
+  'supertech eco village-1': { lat: 28.5147, lon: 77.4855 },
 };
 
 function resolveCoords(location) {
