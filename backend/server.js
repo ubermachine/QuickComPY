@@ -170,6 +170,8 @@ async function handleInitialize(ws, clientId, data) {
   }
 }
 
+let activeLocationPromise = null;
+
 async function handleSetLocation(socket, cid, data) {
   const ws = socket;
   const clientId = cid;
@@ -235,6 +237,15 @@ async function handleSetLocation(socket, cid, data) {
             )}...`,
     })
   );
+
+  while (activeLocationPromise) {
+    await activeLocationPromise;
+  }
+
+  let resolveLock;
+  activeLocationPromise = new Promise((resolve) => {
+    resolveLock = resolve;
+  });
 
   try {
     const setLocationPromises = [];
@@ -340,6 +351,9 @@ async function handleSetLocation(socket, cid, data) {
         message: `Error setting locations: ${error.message}`,
       })
     );
+  } finally {
+    activeLocationPromise = null;
+    if (resolveLock) resolveLock();
   }
 }
 

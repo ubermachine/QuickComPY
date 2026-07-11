@@ -42,6 +42,7 @@ const LOCATION_COORDS = {
   'noida': { lat: 28.5355, lon: 77.3910 },
   'jaipur': { lat: 26.9124, lon: 75.7873 },
   '201306': { lat: 28.5147, lon: 77.4855 },
+  'supertech ecovillage 1': { lat: 28.5147, lon: 77.4855 },
 };
 
 function resolveCoords(location) {
@@ -79,6 +80,140 @@ async function setBlinkitLocation(page, location) {
   console.log(`[setBlinkitLocation] Using coordinates: lat=${lat}, lon=${lon}`);
 
   try {
+    // Check if the target location is already set in cookies or localStorage
+    const currentDetails = { lat: null, lon: null, locality: null };
+    let rawCookieLocality = null;
+    let rawLsLocality = null;
+    let richLocality = null;
+
+    // Read cookies (always safe, even on about:blank)
+    try {
+      const cookies = await page.cookies();
+      const grLat = cookies.find(c => c.name === 'gr_1_lat')?.value;
+      const grLon = cookies.find(c => c.name === 'gr_1_lon')?.value;
+      const grLocality = cookies.find(c => c.name === 'gr_1_locality')?.value;
+      if (grLat && grLon) {
+        currentDetails.lat = parseFloat(grLat);
+        currentDetails.lon = parseFloat(grLon);
+      }
+      if (grLocality) {
+        rawCookieLocality = decodeURIComponent(grLocality);
+      }
+    } catch (err) {
+      console.warn(`[setBlinkitLocation] Error reading cookies:`, err.message);
+    }
+
+    // Read localStorage if page is on blinkit.com
+    const currentUrl = page.url() || '';
+    const isOnBlinkit = currentUrl.includes('blinkit.com');
+    if (isOnBlinkit) {
+      try {
+        const lsDetails = await page.evaluate(() => {
+          try {
+            const latVal = localStorage.getItem('gr_1_lat');
+            const lonVal = localStorage.getItem('gr_1_lon');
+            const localityVal = localStorage.getItem('gr_1_locality');
+            let locationObj = null;
+            const locStr = localStorage.getItem('location');
+            if (locStr) {
+              try { locationObj = JSON.parse(locStr); } catch (_) {}
+            }
+            return { lat: latVal, lon: lonVal, locality: localityVal, locationObj };
+          } catch (_) { return null; }
+        });
+        if (lsDetails) {
+          if (lsDetails.lat && lsDetails.lon) {
+            currentDetails.lat = currentDetails.lat || parseFloat(lsDetails.lat);
+            currentDetails.lon = currentDetails.lon || parseFloat(lsDetails.lon);
+          }
+          if (lsDetails.locality) {
+            rawLsLocality = lsDetails.locality;
+          }
+          if (lsDetails.locationObj) {
+            const lObj = lsDetails.locationObj;
+            const coordsObj = lObj.coords || lObj;
+            const oLat = coordsObj.lat || coordsObj.latitude;
+            const oLon = coordsObj.lon || coordsObj.longitude;
+            if (oLat && oLon) {
+              currentDetails.lat = currentDetails.lat || parseFloat(oLat);
+              currentDetails.lon = currentDetails.lon || parseFloat(oLon);
+            }
+            const oLoc = coordsObj.locality || (coordsObj.display_address && coordsObj.display_address.title);
+            if (oLoc) {
+              richLocality = oLoc;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn(`[setBlinkitLocation] Error reading localStorage:`, err.message);
+      }
+    }
+
+    // Determine the best locality name representation
+    let bestLocality = richLocality;
+    if (!bestLocality || bestLocality === '1') {
+      bestLocality = (rawLsLocality && rawLsLocality !== '1') ? rawLsLocality : null;
+    }
+    if (!bestLocality || bestLocality === '1') {
+      bestLocality = (rawCookieLocality && rawCookieLocality !== '1') ? rawCookieLocality : null;
+    }
+    if (!bestLocality) {
+      bestLocality = richLocality || rawLsLocality || rawCookieLocality || null;
+    }
+    currentDetails.locality = bestLocality;
+
+    // Compare with target location
+    let isMatch = false;
+    const EPSILON = 0.005; // ~500m matches the same locality
+    if (currentDetails.lat !== null && currentDetails.lon !== null) {
+      const latDiff = Math.abs(currentDetails.lat - lat);
+      const lonDiff = Math.abs(currentDetails.lon - lon);
+      if (latDiff < EPSILON && lonDiff < EPSILON) {
+        isMatch = true;
+        console.log(`[setBlinkitLocation] Target coords match set coords: target(${lat}, ${lon}) vs current(${currentDetails.lat}, ${currentDetails.lon})`);
+      }
+    }
+
+    if (!isMatch && typeof location === 'string' && currentDetails.locality) {
+      const normCurrent = currentDetails.locality.toLowerCase().trim();
+      const normTarget = location.toLowerCase().trim();
+      if (normCurrent.includes(normTarget) || normTarget.includes(normCurrent)) {
+        isMatch = true;
+        console.log(`[setBlinkitLocation] Target locality name matches set locality name: target("${location}") vs current("${currentDetails.locality}")`);
+      }
+    }
+
+    if (isMatch) {
+      if (!isOnBlinkit) {
+        console.log(`[setBlinkitLocation] Target location matches existing data, but page is on ${currentUrl}. Navigating directly to blinkit.com...`);
+        await page.goto(`https://blinkit.com`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 35000,
+        }).catch(e => console.log(`[setBlinkitLocation] direct goto warn: ${e.message}`));
+
+        // Try to update locality name from page after navigation
+        try {
+          const updatedLocality = await page.evaluate(() => {
+            try {
+              const locStr = localStorage.getItem('location');
+              if (locStr) {
+                const lObj = JSON.parse(locStr);
+                return lObj.locality || (lObj.display_address && lObj.display_address.title);
+              }
+            } catch (_) {}
+            return localStorage.getItem('gr_1_locality');
+          });
+          if (updatedLocality) {
+            currentDetails.locality = updatedLocality;
+          }
+        } catch (_) {}
+      }
+
+      const title = currentDetails.locality || `${currentDetails.lat || lat},${currentDetails.lon || lon}`;
+      console.log(`[setBlinkitLocation] Location is already set to "${title}". Skipping browser UI automation flow.`);
+      return title;
+    }
+
     // Set up a listener for /location/info to capture the locality name
     let locationTitle = null;
     const locationPromise = new Promise((resolve) => {
@@ -166,23 +301,27 @@ async function isLocationSet(page) {
       return null;
     });
 
-    if (stored && (stored.lat || stored.latitude)) {
-      const lat = stored.lat || stored.latitude;
-      const lon = stored.lon || stored.longitude;
-      console.log(`[isLocationSet] Found stored location: lat=${lat}, lon=${lon}`);
+    if (stored) {
+      const coords = stored.coords || stored;
+      if (coords.lat || coords.latitude) {
+        const lat = coords.lat || coords.latitude;
+        const lon = coords.lon || coords.longitude;
+        console.log(`[isLocationSet] Found stored location: lat=${lat}, lon=${lon}`);
 
-      const result = await page.evaluate(async (latitude, longitude) => {
-        try {
-          const res = await fetch(
-            `https://blinkit.com/visibility?latitude=${latitude}&longitude=${longitude}`,
-            { credentials: 'include', headers: { Accept: 'application/json' } }
-          );
-          const json = await res.json();
-          return json && json.serviceable ? 'serviceable' : '400';
-        } catch (_) { return '400'; }
-      }, lat, lon);
+        const result = await page.evaluate(async (latitude, longitude) => {
+          try {
+            const res = await fetch(
+              `https://blinkit.com/visibility?latitude=${latitude}&longitude=${longitude}`,
+              { credentials: 'include', headers: { Accept: 'application/json' } }
+            );
+            const json = await res.json();
+            return json && json.serviceable ? 'serviceable' : '400';
+          } catch (_) { return '400'; }
+        }, lat, lon);
 
-      return result === 'serviceable' ? (stored.locality || `${lat},${lon}`) : '400';
+        const storedLocality = coords.locality || (coords.display_address && coords.display_address.title);
+        return result === 'serviceable' ? (storedLocality || `${lat},${lon}`) : '400';
+      }
     }
 
     // Check cookies
