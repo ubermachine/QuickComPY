@@ -18,12 +18,22 @@ async function setBigbasketLocation(page, loc) {
     // Wait for the button to appear
     await page.waitForFunction(() => {
       const buttons = Array.from(document.querySelectorAll("button"));
-      return buttons.some(b => b.textContent && (b.textContent.includes("Deliver to") || b.textContent.includes("Delivery in") || b.textContent.includes("Select Location")));
+      return buttons.some(b => b.textContent && (
+        b.textContent.includes("Deliver to") || 
+        b.textContent.includes("Delivery in") || 
+        b.textContent.includes("Get it in") || 
+        b.textContent.includes("Select Location")
+      ));
     }, { timeout: 15000 }).catch(() => console.log("Timeout waiting for location button..."));
 
     const clicked = await page.evaluate(() => {
       const buttons = Array.from(document.querySelectorAll("button"));
-      const target = buttons.find(b => b.textContent && (b.textContent.includes("Deliver to") || b.textContent.includes("Delivery in") || b.textContent.includes("Select Location")));
+      const target = buttons.find(b => b.textContent && (
+        b.textContent.includes("Deliver to") || 
+        b.textContent.includes("Delivery in") || 
+        b.textContent.includes("Get it in") || 
+        b.textContent.includes("Select Location")
+      ));
       if (target) {
         target.click();
         return true;
@@ -114,7 +124,12 @@ async function isLocSet(page) {
     const locText = await page.evaluate(() => {
       // Find delivery button text (usually contains 'Deliver to')
       const button = Array.from(document.querySelectorAll("button")).find(b => 
-        b.textContent && (b.textContent.includes("Deliver to") || b.textContent.includes("Delivery in"))
+        b.textContent && (
+          b.textContent.includes("Deliver to") || 
+          b.textContent.includes("Delivery in") || 
+          b.textContent.includes("Get it in") || 
+          b.textContent.includes("Select Location")
+        )
       );
       if (button) {
         const txt = button.textContent.trim();
