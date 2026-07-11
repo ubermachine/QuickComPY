@@ -1,0 +1,344 @@
+[
+  {
+    "url": "https://blinkit.com/vendor.b019760695555f8be4c1.css",
+    "status": 200,
+    "contentType": "text/css",
+    "bodyPreview": "@font-face{font-family:\"IconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff\") format(\"woff\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.ttf\") format(\"truetype\");font-style:\"normal\";font-weight:\"normal\";font-display:swap}@font-face{font-family:\"NewIconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/newiconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/"
+  },
+  {
+    "url": "https://blinkit.com/v2/accounts/auth_key/",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"auth_key\":\"c761ec3633c22afad934fb17a66385c1c06c5472b4898b866b7306186d0bb477\"}"
+  },
+  {
+    "url": "https://www.googleadservices.com/pagead/conversion/937732702/?random=1783755270078&cv=11&fst=1783755270078&fmt=7&bg=ffffff&guid=ON&async=1&en=conversion&gtm=45be6781v9117923475z872793281za20gzb72793281zd72793281xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=115938466~115938469~118826210~118897920~118897930~119027224&u_w=1366&u_h=768&url=https%3A%2F%2Fblinkit.com%2F&rcb=17&label=UdpECJnF8N4DEN7Ukr8D&capi=1&frm=0&tiba=30%2C000%2B%20products%20delivered%20to%20your%20doorstep%20%7C%20Blinkit&bttype=purchase&value=0&hn=www.googleadservices.com&npa=0&auid=1657840342.1783755269&uaa=&uab=&uafvl=&uamb=0&uam=&uap=&uapv=&uaw=0&ec_mode=a&_tu=CA&gcl_ctr=1~0~0~0&category=acrcp_v1_512&em=tv.1&emd=tvd.1&ept=5",
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "bodyPreview": "event: message\ndata: {\"fetch\":[\"https://googleads.g.doubleclick.net/pagead/viewthroughconversion/937732702/?random=2010356015&cv=11&fst=1783755270078&fmt=8&bg=ffffff&guid=ON&async=1&en=conversion&gtm=45be6781v9117923475z872793281za20gzb72793281zd72793281xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=115938466~115938469~118826210~118897920~118897930~119027224&u_w=1366&u_h=768&url=https%3A%2F%2Fblinkit.com%2F&rcb=17&label=UdpECJnF8N4DEN7Ukr8D&capi=1&frm=0&tiba=30%2C000%2B%20products%20delivered%20to%20your%20"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/tag_collections",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"CategoryCollectionsMap\":{\"hpc_beauty_and_care\":{\"DisplayName\":\"Beauty \\u0026 Personal Care\",\"Collection\":[{\"id\":231389,\"boost_product_ids\":null,\"name\":\"hpc_bath and body\",\"display_name\":\"Bath \\u0026 Body\",\"description\":\"\",\"uuid\":\"OTg3NjU0MzIxMjM0NTMzNDY=\",\"group_by\":\"\",\"sort_by\":\"bestsellers\",\"show_filters\":true,\"enabled_flag\":true,\"created_at\":\"0001-01-01T00:00:00Z\",\"updated_at\":\"0001-01-01T00:00:00Z\",\"created_by\":\"\",\"updated_by\":\"\",\"filters\":null,\"groupings\":[{\"id\":679509,\"uuid\":\"b4b154d8-c1"
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 301,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/visibility?latitude=28.413333&longitude=77.072833",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"serviceable\":true,\"merchants\":[{\"id\":\"31719\",\"chain_id\":1383,\"business_types\":[\"value\"],\"lat\":28.413333,\"lng\":77.072833,\"distance\":0,\"duration\":0,\"filters\":[{\"name\":\"assortment_tag\",\"value\":[\"express\",\"longtail\",\"unicorn\"]}],\"disruption\":{\"block_checkouts\":\"\",\"code\":\"\",\"is_disrupted\":\"\",\"start_ts\":\"\",\"end_ts\":\"\",\"disruption_tags\":[]},\"rank\":1,\"is_nearby_store\":false,\"city_id\":1849,\"city_code\":\"HR\",\"city_name\":\"HR-NCR\",\"state_id\":12,\"state_name\":\"Haryana\",\"additional_filters\":{\"a"
+  },
+  {
+    "url": "https://blinkit.com/api/feature-flags/receive",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"data\":{\"featureFlags\":{\"is-web-enhanced-page-load-enabled\":true,\"is-ssr-prerender-enable-for-bots\":false,\"is-web-full-screen-location-select-enabled\":false,\"is-type-to-search-mweb-enabled\":true,\"is-web-onesupport-enabled\":true,\"is-web-zpay-enabled\":true,\"is-web-print-enabled\":true,\"is_consumer_web_bff_enabled\":true,\"is-web-jumbo-client-enabled\":true,\"is-web-plp-bff-enabled\":true,\"is-web-cart-coupon-enabled\":false,\"is-web-search-bff-enabled\":true,\"is-web-zpay-v2-enabled\":false,\"i"
+  },
+  {
+    "url": "https://blinkit.com/v1/consumerweb/eta",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"eta_in_minutes\":10,\"title\":\"Delivery in 10 minutes\",\"update_eta_action\":{\"type\":\"update_eta\",\"update_eta\":{\"eta_map_v2\":{\"31719\":{\"express\":{\"eta\":10,\"asset_id\":\"0\"},\"installation_fan_installation\":{\"eta\":10,\"asset_id\":\"0\"},\"large_order\":{\"eta\":14,\"asset_id\":\"0\"},\"longtail\":{\"eta\":10,\"asset_id\":\"0\"},\"payment_mode_cash_on_delivery\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_doctor\":{\"eta\":12,\"asset_id\":\"0\"},\"pharma_otx\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_pharmacist\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_rx\":"
+  },
+  {
+    "url": "https://blinkit.com/v1/analytics_events_properties/",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"events\":{\"Card Won\":{\"enabled\":true,\"version\":2,\"integrations\":{\"JUMBO\":{\"enabled\":true,\"table_names\":[\"click_events\"]},\"FIREBASE\":{\"enabled\":true}}},\"ADT Visit\":{\"enabled\":true,\"version\":2,\"integrations\":{\"JUMBO\":{\"enabled\":true,\"table_names\":[\"impression_events\"]}}},\"Cta Shown\":{\"enabled\":true,\"version\":2,\"integrations\":{\"JUMBO\":{\"enabled\":true,\"table_names\":[\"impression_events\"]}}},\"Fab Shown\":{\"enabled\":true,\"version\":2,\"integrations\":{\"JUMBO\":{\"enabled\":true,\"table_names\":[\"impression_eve"
+  },
+  {
+    "url": "https://blinkit.com/config/main",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"config\":{\"brandsList\":[\"grofers Happy Day\",\"grofers Happy Home\",\"grofers Mother's Choice\",\"g Fresh\",\"O'range\",\"Savemore\",\"24 Mantra\",\"Aashirvaad\",\"Act II\",\"Amul\",\"Axe\",\"Bambino\",\"Best Value\",\"Bingo\",\"Bisleri\",\"Boost\",\"Bournvita\",\"Britannia\",\"Brooke Bond\",\"Bru\",\"Cadbury\",\"Cheetos\",\"Cinthol\",\"Closeup\",\"Coca-Cola\",\"Colgate\",\"Dabur\",\"Danone\",\"Del Monte\",\"Dettol\",\"Dhara\",\"Dove\",\"Durex\",\"English Oven\",\"Everest\",\"Fiama Di Wills\",\"Garnier\",\"Gatorade\",\"Gillette\",\"Glucon-D\",\"Grocery\",\"Gow"
+  },
+  {
+    "url": "https://mpc2-prod-28-is5qnl632q-ue.a.run.app/events?cee=no",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data/?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"additional_charges_config\":null,\"analytics_properties\":{\"merchant_id\":31719,\"merchant_name\":null,\"city_id\":1849,\"city_name\":\"HR-NCR\",\"chain_id\":1383,\"min_order\":null,\"delivery_type\":null,\"services\":{\"merchants\":[{\"id\":\"31719\",\"type\":\"express\"},{\"id\":\"31719\",\"type\":\"longtail\"},{\"id\":\"31719\",\"type\":\"unicorn\"},{\"id\":\"46421\",\"type\":\"super_longtail\"},{\"id\":\"35940\",\"type\":\"instant\"}],\"emergency\":[{\"type\":\"ambulance\",\"id\":\"118\"},{\"type\":\"ambulance\",\"id\":\"53\"},{\"type\":\"ambulance\",\"id\":\"96\"},{\"type\":\"a"
+  },
+  {
+    "url": "https://blinkit.com/feed/?template_version=9",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\"pagination\":null,\"objects\":[{\"tracking\":{\"widget_meta\":{\"name\":\"Static Banner\",\"title\":\"fnv banner\",\"minimum_time_between_impressions\":5000,\"variation_id\":null,\"revision_id\":\"14839841\",\"id\":\"7f5a5242-5b1e-419f-bdc5-8e55f616e413\"}},\"type\":55,\"action\":{\"should_show_sk_overlay\":false,\"default_uri\":\"grofers:\\/\\/collection-products?collection_uuid=736e6fc2-8c33-4c35-9821-d325509aa0e5\",\"ios_apps_flyer_link\":\"\"},\"grid_span\":12,\"data\":{\"image\":\"https:\\/\\/cdn.grofers.com\\/layout-engine\\/2026-01\\/Frame-"
+  },
+  {
+    "url": "https://blinkit.com/c6dbabe372a523efd73a.json",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\n\t\"name\": \"blinkit Lite\",\n\t\"short_name\": \"blinkit Lite\",\n\t\"description\": \"Order Online Grocery from blinkit, the Best Online Supermarket Store in India. Buy Household essentials, Beverages, Personal Care products & more from a wide range of groceries and home needs.\\n✔ Best Prices & Offers ✔ Cash on Delivery ✔ Easy Returns\",\n\t\"lang\": \"en-GB\",\n\t\"start_url\": \"./\",\n\t\"display\": \"standalone\",\n\t\"theme_color\": \"#1c2224\",\n\t\"background_color\": \"#F8CB46\",\n\t\"orientation\": \"portrait\",\n\t\"scope\": \"/\",\n\t\"gcm_"
+  },
+  {
+    "url": "https://blinkit.com/vendor.b019760695555f8be4c1.css",
+    "status": 200,
+    "contentType": "text/css",
+    "bodyPreview": "@font-face{font-family:\"IconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff\") format(\"woff\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.ttf\") format(\"truetype\");font-style:\"normal\";font-weight:\"normal\";font-display:swap}@font-face{font-family:\"NewIconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/newiconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/tag_collections",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"CategoryCollectionsMap\":{\"hpc_beauty_and_care\":{\"DisplayName\":\"Beauty \\u0026 Personal Care\",\"Collection\":[{\"id\":231389,\"boost_product_ids\":null,\"name\":\"hpc_bath and body\",\"display_name\":\"Bath \\u0026 Body\",\"description\":\"\",\"uuid\":\"OTg3NjU0MzIxMjM0NTMzNDY=\",\"group_by\":\"\",\"sort_by\":\"bestsellers\",\"show_filters\":true,\"enabled_flag\":true,\"created_at\":\"0001-01-01T00:00:00Z\",\"updated_at\":\"0001-01-01T00:00:00Z\",\"created_by\":\"\",\"updated_by\":\"\",\"filters\":null,\"groupings\":[{\"id\":679509,\"uuid\":\"b4b154d8-c1"
+  },
+  {
+    "url": "https://www.googleadservices.com/pagead/conversion/937732702/?random=1783755280522&cv=11&fst=1783755280522&fmt=7&bg=ffffff&guid=ON&async=1&en=conversion&gtm=45be6781v9117923475z872793281za20gzb72793281zd72793281xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=115938466~115938469~118395334~118826210~118897920~118897930~119027224&u_w=1366&u_h=768&url=https%3A%2F%2Fblinkit.com%2F%3Flat%3D28.6139%26lon%3D77.2090&rcb=2&label=UdpECJnF8N4DEN7Ukr8D&capi=1&frm=0&tiba=30%2C000%2B%20products%20delivered%20to%20your%20doorstep%20%7C%20Blinkit&bttype=purchase&value=0&hn=www.googleadservices.com&npa=0&auid=1657840342.1783755269&uaa=&uab=&uafvl=&uamb=0&uam=&uap=&uapv=&uaw=0&ec_mode=a&_tu=CA&gcl_ctr=2~0~0~0&category=acrcp_v1_512&em=tv.1&emd=tvd.1&ept=5",
+    "status": 200,
+    "contentType": "application/json; charset=UTF-8",
+    "bodyPreview": "event: message\ndata: {\"fetch\":[\"https://googleads.g.doubleclick.net/pagead/viewthroughconversion/937732702/?random=1969180656&cv=11&fst=1783755280522&fmt=8&bg=ffffff&guid=ON&async=1&en=conversion&gtm=45be6781v9117923475z872793281za20gzb72793281zd72793281xea&gcd=13l3l3l3l1l1&dma=0&tag_exp=115938466~115938469~118395334~118826210~118897920~118897930~119027224&u_w=1366&u_h=768&url=https%3A%2F%2Fblinkit.com%2F%3Flat%3D28.6139%26lon%3D77.2090&rcb=2&label=UdpECJnF8N4DEN7Ukr8D&capi=1&frm=0&tiba=30%2C000"
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 301,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/visibility?latitude=28.6139&longitude=77.209",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"serviceable\":true,\"merchants\":[{\"id\":\"36778\",\"chain_id\":1383,\"business_types\":[\"value\"],\"lat\":28.6139,\"lng\":77.209,\"distance\":0,\"duration\":0,\"filters\":[{\"name\":\"assortment_tag\",\"value\":[\"express\"]}],\"disruption\":{\"block_checkouts\":\"\",\"code\":\"\",\"is_disrupted\":\"\",\"start_ts\":\"\",\"end_ts\":\"\",\"disruption_tags\":[]},\"rank\":1,\"is_nearby_store\":false,\"city_id\":1,\"city_code\":\"DL\",\"city_name\":\"Delhi\",\"state_id\":25,\"state_name\":\"NCT of Delhi\",\"additional_filters\":{\"assortment_tags\":[\"express"
+  },
+  {
+    "url": "https://blinkit.com/visibility?latitude=28.413333&longitude=77.072833",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"serviceable\":true,\"merchants\":[{\"id\":\"31719\",\"chain_id\":1383,\"business_types\":[\"value\"],\"lat\":28.413333,\"lng\":77.072833,\"distance\":0,\"duration\":0,\"filters\":[{\"name\":\"assortment_tag\",\"value\":[\"express\",\"longtail\",\"unicorn\"]}],\"disruption\":{\"block_checkouts\":\"\",\"code\":\"\",\"is_disrupted\":\"\",\"start_ts\":\"\",\"end_ts\":\"\",\"disruption_tags\":[]},\"rank\":1,\"is_nearby_store\":false,\"city_id\":1849,\"city_code\":\"HR\",\"city_name\":\"HR-NCR\",\"state_id\":12,\"state_name\":\"Haryana\",\"additional_filters\":{\"a"
+  },
+  {
+    "url": "https://blinkit.com/v1/consumerweb/eta",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"eta_in_minutes\":10,\"title\":\"Delivery in 10 minutes\",\"update_eta_action\":{\"type\":\"update_eta\",\"update_eta\":{\"eta_map_v2\":{\"31719\":{\"express\":{\"eta\":10,\"asset_id\":\"0\"},\"installation_fan_installation\":{\"eta\":10,\"asset_id\":\"0\"},\"large_order\":{\"eta\":14,\"asset_id\":\"0\"},\"longtail\":{\"eta\":10,\"asset_id\":\"0\"},\"payment_mode_cash_on_delivery\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_doctor\":{\"eta\":12,\"asset_id\":\"0\"},\"pharma_otx\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_pharmacist\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_rx\":"
+  },
+  {
+    "url": "https://mpc2-prod-28-is5qnl632q-ue.a.run.app/events?cee=no",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data/?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"additional_charges_config\":null,\"analytics_properties\":{\"merchant_id\":31719,\"merchant_name\":null,\"city_id\":1849,\"city_name\":\"HR-NCR\",\"chain_id\":1383,\"min_order\":null,\"delivery_type\":null,\"services\":{\"merchants\":[{\"id\":\"31719\",\"type\":\"express\"},{\"id\":\"31719\",\"type\":\"longtail\"},{\"id\":\"31719\",\"type\":\"unicorn\"},{\"id\":\"46421\",\"type\":\"super_longtail\"},{\"id\":\"35940\",\"type\":\"instant\"}],\"emergency\":[{\"type\":\"ambulance\",\"id\":\"118\"},{\"type\":\"ambulance\",\"id\":\"53\"},{\"type\":\"ambulance\",\"id\":\"9\"},{\"type\":\"am"
+  },
+  {
+    "url": "https://blinkit.com/feed/?template_version=9",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\"pagination\":null,\"objects\":[{\"tracking\":{\"widget_meta\":{\"name\":\"Static Banner\",\"title\":\"fnv banner\",\"minimum_time_between_impressions\":5000,\"variation_id\":null,\"revision_id\":\"14839841\",\"id\":\"7f5a5242-5b1e-419f-bdc5-8e55f616e413\"}},\"type\":55,\"action\":{\"should_show_sk_overlay\":false,\"default_uri\":\"grofers:\\/\\/collection-products?collection_uuid=736e6fc2-8c33-4c35-9821-d325509aa0e5\",\"ios_apps_flyer_link\":\"\"},\"grid_span\":12,\"data\":{\"image\":\"https:\\/\\/cdn.grofers.com\\/layout-engine\\/2026-01\\/Frame-"
+  },
+  {
+    "url": "https://blinkit.com/location/info?lat=28.6139&lon=77.209&is_pin_moved=false",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"is_serviceable\":true,\"is_available\":true,\"poi_data\":{\"polygons\":null},\"location_info\":{\"sublocalities\":[\"Punjabi Bagh Cooperative Housing Soceity\",\"MO\",\"Karol Bagh\"],\"city\":\"New Delhi\",\"district\":\"Delhi Division\",\"country\":\"India\",\"state\":\"Delhi\",\"postal_code\":\"110001\",\"formatted_address\":\"no. 8860656316, Central Secretariat, Punjabi Bagh Cooperative Housing Soceity, MO, Karol Bagh, New Delhi, Delhi 110001, India\",\"premises\":[],\"street\":[],\"landmarks\":[\"Central Secretariat\"]},\"display_address\""
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 301,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data/?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"additional_charges_config\":null,\"analytics_properties\":{\"merchant_id\":36778,\"merchant_name\":null,\"city_id\":1,\"city_name\":\"Delhi\",\"chain_id\":1383,\"min_order\":null,\"delivery_type\":null,\"services\":{\"merchants\":[{\"id\":\"36778\",\"type\":\"express\"},{\"id\":\"34280\",\"type\":\"longtail\"},{\"id\":\"35940\",\"type\":\"instant\"}]},\"segment_type\":null,\"user_type\":null,\"lifetime_orders\":null,\"monthly_orders\":null,\"traits_middleware\":null,\"user_experiment_buckets\":[\"RANDOM#bucket1\",\"INCREASING_ROLLOUT#bucket2\",\"DECREASING"
+  },
+  {
+    "url": "https://blinkit.com/v1/consumerweb/eta",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"eta_in_minutes\":12,\"title\":\"Delivery in 12 minutes\",\"update_eta_action\":{\"type\":\"update_eta\",\"update_eta\":{\"eta_map_v2\":{\"34280\":{\"installation_fan_installation\":{\"eta\":10,\"asset_id\":\"0\"},\"large_order\":{\"eta\":30,\"asset_id\":\"1\"},\"longtail\":{\"eta\":25,\"asset_id\":\"1\"},\"payment_mode_cash_on_delivery\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_doctor\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_otx\":{\"eta\":30,\"asset_id\":\"1\"},\"pharma_pharmacist\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_rx\":{\"eta\":30,\"asset_id\":\"1\"},\"pharma_rx"
+  },
+  {
+    "url": "https://blinkit.com/v5/carts",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\"cart_type\":\"product\",\"toolbar_config\":{},\"subscribers\":{\"ON_PROMO_APPLY\":{},\"CONFLICTING_OFFER_APPLIED\":{},\"GST_DETAILS_SAVED\":{\"common_actions\":[{\"remove_page_cache\":{},\"type\":\"remove_page_cache\"},{\"update_cart\":{\"cart_request_body\":{\"is_gst_opted\":true}},\"type\":\"update_cart\"}]},\"ITEM_COUNT_MODIFY\":{\"common_actions\":[{\"type\":\"refresh_page\"}]},\"GST_DETAILS_REMOVED\":{\"common_actions\":[{\"remove_page_cache\":{},\"type\":\"remove_page_cache\"},{\"update_cart\":{\"cart_request_body\":{}},\"type\":\"update_cart"
+  },
+  {
+    "url": "https://blinkit.com/feed/?template_version=9",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\"pagination\":null,\"objects\":[{\"tracking\":{\"widget_meta\":{\"name\":\"Static Banner\",\"title\":\"fnv banner\",\"minimum_time_between_impressions\":5000,\"variation_id\":null,\"revision_id\":\"14839841\",\"id\":\"7f5a5242-5b1e-419f-bdc5-8e55f616e413\"}},\"type\":55,\"action\":{\"should_show_sk_overlay\":false,\"default_uri\":\"grofers:\\/\\/collection-products?collection_uuid=736e6fc2-8c33-4c35-9821-d325509aa0e5\",\"ios_apps_flyer_link\":\"\"},\"grid_span\":12,\"data\":{\"image\":\"https:\\/\\/cdn.grofers.com\\/layout-engine\\/2026-01\\/Frame-"
+  },
+  {
+    "url": "https://blinkit.com/feed/?template_version=9",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\"pagination\":null,\"objects\":[{\"tracking\":{\"widget_meta\":{\"name\":\"Static Banner\",\"title\":\"fnv banner\",\"minimum_time_between_impressions\":5000,\"variation_id\":null,\"revision_id\":\"14839841\",\"id\":\"7f5a5242-5b1e-419f-bdc5-8e55f616e413\"}},\"type\":55,\"action\":{\"should_show_sk_overlay\":false,\"default_uri\":\"grofers:\\/\\/collection-products?collection_uuid=736e6fc2-8c33-4c35-9821-d325509aa0e5\",\"ios_apps_flyer_link\":\"\"},\"grid_span\":12,\"data\":{\"image\":\"https:\\/\\/cdn.grofers.com\\/layout-engine\\/2026-01\\/Frame-"
+  },
+  {
+    "url": "https://blinkit.com/c6dbabe372a523efd73a.json",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\n\t\"name\": \"blinkit Lite\",\n\t\"short_name\": \"blinkit Lite\",\n\t\"description\": \"Order Online Grocery from blinkit, the Best Online Supermarket Store in India. Buy Household essentials, Beverages, Personal Care products & more from a wide range of groceries and home needs.\\n✔ Best Prices & Offers ✔ Cash on Delivery ✔ Easy Returns\",\n\t\"lang\": \"en-GB\",\n\t\"start_url\": \"./\",\n\t\"display\": \"standalone\",\n\t\"theme_color\": \"#1c2224\",\n\t\"background_color\": \"#F8CB46\",\n\t\"orientation\": \"portrait\",\n\t\"scope\": \"/\",\n\t\"gcm_"
+  },
+  {
+    "url": "https://api.blinkit.com/v1/layout/listing?search_string=milk&latitude=28.6139&longitude=77.2090",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://api.blinkit.com/v2/listing/search?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v6/search/listing/?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": "<!doctype html><html class=\"no-js\" lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\"/><script>window.dataLayer=window.dataLayer||[]</script>  <script>!function(){const t=new URL(window.location.href);let e=!1;[\"wbraid\",\"gclid\",\"gbraid\",\"fbclid\",\"msclkid\",\"ttclid\",\"dclid\"].forEach((c=>{const n=t.searchParams.get(c);n&&function(t){const e=decodeURIComponent(t);return!/^[A-Za-z0-9_-]{25,}={0,2}$/.test(e)}(n)&&(t"
+  },
+  {
+    "url": "https://blinkit.com/v1/catalog/search?q=milk",
+    "status": 404,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": "<!doctype html>\n<html>\n  <head>\n    <meta charset=\"utf-8\">\n    <title>Error</title>\n  </head>\n  <body>\n    <h1>Error</h1>\n    <p>no Route matched with those values.</p>\n    <p>request_id: b6b6f45fb5371a65dcce8167d7c31301</p>\n  </body>\n</html>\n"
+  },
+  {
+    "url": "https://api.blinkit.com/v2/search?q=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://api.blinkit.com/v1/listing?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/vendor.b019760695555f8be4c1.css",
+    "status": 200,
+    "contentType": "text/css",
+    "bodyPreview": "@font-face{font-family:\"IconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.woff\") format(\"woff\"),url(\"https://cdn.grofers.com/assets/web/assets/iconfont.ttf\") format(\"truetype\");font-style:\"normal\";font-weight:\"normal\";font-display:swap}@font-face{font-family:\"NewIconFont\";src:url(\"https://cdn.grofers.com/assets/web/assets/newiconfont.woff2\") format(\"woff2\"),url(\"https://cdn.grofers.com/assets/web/"
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 301,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/visibility?latitude=28.6139118&longitude=77.20902029999999",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"success\":true,\"serviceable\":true,\"merchants\":[{\"id\":\"36778\",\"chain_id\":1383,\"business_types\":[\"value\"],\"lat\":28.6139118,\"lng\":77.20902029999999,\"distance\":0,\"duration\":0,\"filters\":[{\"name\":\"assortment_tag\",\"value\":[\"express\"]}],\"disruption\":{\"block_checkouts\":\"\",\"code\":\"\",\"is_disrupted\":\"\",\"start_ts\":\"\",\"end_ts\":\"\",\"disruption_tags\":[]},\"rank\":1,\"is_nearby_store\":false,\"city_id\":1,\"city_code\":\"DL\",\"city_name\":\"Delhi\",\"state_id\":25,\"state_name\":\"NCT of Delhi\",\"additional_filters\":{\"assortment_t"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/empty_search",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"is_success\":true,\"response\":{\"snippets\":[{\"data\":{\"identity\":{\"id\":\"recent_searches_pill_container\"},\"items\":[{\"data\":{\"title\":{\"text\":\"Recent searches\",\"color\":{\"type\":\"black\",\"tint\":\"900\"},\"font\":{\"size\":\"500\",\"weight\":\"extrabold\"}},\"right_button\":{\"text\":\"clear\",\"color\":{\"type\":\"green\",\"tint\":\"700\"},\"click_action\":{\"clear_cache\":{\"db_identifier_key\":\"search_history\"},\"type\":\"clear_cache\"},\"font\":{\"size\":\"300\",\"weight\":\"bold\"}},\"bg_color\":\"#FFFFFF\",\"padding\":\"12,4,12,12\"},\"tracking\":{\"impres"
+  },
+  {
+    "url": "https://blinkit.com/v1/actions/auto_suggest",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"actions\":[{\"type\":\"upsert_snippets\",\"upsert_snippets\":{\"snippet_position_to_attach\":0,\"snippets_to_add\":[{\"data\":{\"items\":[{\"data\":{\"title\":{\"text\":\"\\u003cmedium-400|{grey-700|Milk}\\u003e\",\"color\":{\"type\":\"black\",\"tint\":\"900\"},\"font\":{\"size\":\"400\",\"weight\":\"semibold\"},\"is_markdown\":1,\"number_of_lines\":1},\"click_action\":{\"type\":\"update_search_query\",\"update_search_query\":{\"query\":\"milk\",\"search_type\":\"auto_suggest\",\"should_validate\":false,\"body_params\":{\"doc_id\":\"KEYTERM-milk-1497\",\"entity_imag"
+  },
+  {
+    "url": "https://blinkit.com/v1/consumerweb/eta",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"eta_in_minutes\":13,\"title\":\"Delivery in 13 minutes\",\"update_eta_action\":{\"type\":\"update_eta\",\"update_eta\":{\"eta_map_v2\":{\"34280\":{\"installation_fan_installation\":{\"eta\":10,\"asset_id\":\"0\"},\"large_order\":{\"eta\":30,\"asset_id\":\"1\"},\"longtail\":{\"eta\":25,\"asset_id\":\"1\"},\"payment_mode_cash_on_delivery\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_doctor\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_otx\":{\"eta\":30,\"asset_id\":\"1\"},\"pharma_pharmacist\":{\"eta\":10,\"asset_id\":\"0\"},\"pharma_rx\":{\"eta\":30,\"asset_id\":\"1\"},\"pharma_rx"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/search?q=milk&search_type=type_to_search",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"is_success\":true,\"response\":{\"snippets\":[{\"data\":{\"identity\":{\"id\":\"product_container\"},\"title\":{\"text\":\"Showing results for \\\"milk\\\"\",\"color\":{\"type\":\"black\",\"tint\":\"900\"},\"font\":{\"size\":\"400\",\"weight\":\"bold\"},\"number_of_lines\":2},\"bg_color\":\"#F4F6FB\",\"padding\":\"0,6,0,6\"},\"widget_type\":\"image_text_vr_type_header\",\"layout_config\":{\"spacing\":\"8,0,8,0\"}},{\"data\":{\"identity\":{\"id\":\"561268\"},\"section_count\":2,\"layout_type\":\"grid\",\"bg_color\":{\"type\":\"indigo\",\"tint\":\"050\"},\"click_action\":{\"blinkit_d"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/tag_collections",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"CategoryCollectionsMap\":{\"hpc_beauty_and_care\":{\"DisplayName\":\"Beauty \\u0026 Personal Care\",\"Collection\":[{\"id\":231389,\"boost_product_ids\":null,\"name\":\"hpc_bath and body\",\"display_name\":\"Bath \\u0026 Body\",\"description\":\"\",\"uuid\":\"OTg3NjU0MzIxMjM0NTMzNDY=\",\"group_by\":\"\",\"sort_by\":\"bestsellers\",\"show_filters\":true,\"enabled_flag\":true,\"created_at\":\"0001-01-01T00:00:00Z\",\"updated_at\":\"0001-01-01T00:00:00Z\",\"created_by\":\"\",\"updated_by\":\"\",\"filters\":null,\"groupings\":[{\"id\":679509,\"uuid\":\"b4b154d8-c1"
+  },
+  {
+    "url": "https://blinkit.com/v2/services/secondary-data/?filter=new_offer,show_product_group_sharing,is_new_user,cart_ab_test_variant,city_id,sku_auto_add,cart_banner_image,show_referral_login,product_sku_limit&offers_last_visit_ts=0",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"additional_charges_config\":null,\"analytics_properties\":{\"merchant_id\":36778,\"merchant_name\":null,\"city_id\":1,\"city_name\":\"Delhi\",\"chain_id\":1383,\"min_order\":null,\"delivery_type\":null,\"services\":{\"merchants\":[{\"id\":\"36778\",\"type\":\"express\"},{\"id\":\"34280\",\"type\":\"longtail\"},{\"id\":\"35940\",\"type\":\"instant\"}]},\"segment_type\":null,\"user_type\":null,\"lifetime_orders\":null,\"monthly_orders\":null,\"traits_middleware\":null,\"user_experiment_buckets\":[\"RANDOM#bucket1\",\"INCREASING_ROLLOUT#bucket2\",\"DECREASING"
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/search?offset=12&limit=12&actual_query=milk&last_snippet_type=product_card_snippet_type_2&last_widget_type=listing_container&page_index=1&q=milk&search_count=144&search_method=basic&search_type=type_to_search&tab_position=0&total_entities_processed=1&total_pagination_items=144",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": "{\"is_success\":true,\"response\":{\"snippets\":[{\"data\":{\"identity\":{\"id\":\"547184\"},\"section_count\":2,\"layout_type\":\"grid\",\"bg_color\":{\"type\":\"indigo\",\"tint\":\"050\"},\"click_action\":{\"blinkit_deeplink\":{\"url\":\"grofers://pdp?product_id=547184\\u0026merchant_id=36778\\u0026previous_page=search\\u0026npr_flag=PRODUCT_RECOMMENDATION\\u0026product_index=12\"},\"type\":\"blinkit_deeplink\"},\"image\":{\"url\":\"https://cdn.grofers.com/da/cms-assets/cms/product/5799b89d-2123-4746-b6e7-916722c37aec.png\"},\"name\":{\"text\":\"Amu"
+  },
+  {
+    "url": "https://mpc2-prod-28-is5qnl632q-ue.a.run.app/events?cee=no",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/c6dbabe372a523efd73a.json",
+    "status": 200,
+    "contentType": "application/json",
+    "bodyPreview": "{\n\t\"name\": \"blinkit Lite\",\n\t\"short_name\": \"blinkit Lite\",\n\t\"description\": \"Order Online Grocery from blinkit, the Best Online Supermarket Store in India. Buy Household essentials, Beverages, Personal Care products & more from a wide range of groceries and home needs.\\n✔ Best Prices & Offers ✔ Cash on Delivery ✔ Easy Returns\",\n\t\"lang\": \"en-GB\",\n\t\"start_url\": \"./\",\n\t\"display\": \"standalone\",\n\t\"theme_color\": \"#1c2224\",\n\t\"background_color\": \"#F8CB46\",\n\t\"orientation\": \"portrait\",\n\t\"scope\": \"/\",\n\t\"gcm_"
+  },
+  {
+    "url": "https://blinkit.com/v6/search/listing/?search_string=milk",
+    "status": 404,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": "<!doctype html><html class=\"no-js\" lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\"/><script>window.dataLayer=window.dataLayer||[]</script>  <script>!function(){const t=new URL(window.location.href);let e=!1;[\"wbraid\",\"gclid\",\"gbraid\",\"fbclid\",\"msclkid\",\"ttclid\",\"dclid\"].forEach((c=>{const n=t.searchParams.get(c);n&&function(t){const e=decodeURIComponent(t);return!/^[A-Za-z0-9_-]{25,}={0,2}$/.test(e)}(n)&&(t"
+  },
+  {
+    "url": "https://api.blinkit.com/v6/search/listing/?search_string=milk",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/listing?search_string=milk",
+    "status": 404,
+    "contentType": "text/plain; charset=UTF-8",
+    "bodyPreview": "404 page not found"
+  },
+  {
+    "url": "https://api.blinkit.com/v1/layout/listing?search_string=milk",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v6/search/listing/?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "text/html; charset=utf-8",
+    "bodyPreview": "<!doctype html><html class=\"no-js\" lang=\"en\"><head><meta charset=\"utf-8\"/><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,maximum-scale=1,user-scalable=0\"/><script>window.dataLayer=window.dataLayer||[]</script>  <script>!function(){const t=new URL(window.location.href);let e=!1;[\"wbraid\",\"gclid\",\"gbraid\",\"fbclid\",\"msclkid\",\"ttclid\",\"dclid\"].forEach((c=>{const n=t.searchParams.get(c);n&&function(t){const e=decodeURIComponent(t);return!/^[A-Za-z0-9_-]{25,}={0,2}$/.test(e)}(n)&&(t"
+  },
+  {
+    "url": "https://api.blinkit.com/v6/search/listing/?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "application/json; charset=utf-8",
+    "bodyPreview": null
+  },
+  {
+    "url": "https://blinkit.com/v1/layout/listing?search_string=milk&lat=28.6139&lon=77.2090",
+    "status": 404,
+    "contentType": "text/plain; charset=UTF-8",
+    "bodyPreview": "404 page not found"
+  }
+]
