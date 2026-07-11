@@ -474,19 +474,29 @@ export default function Home() {
                 All Services
               </button>
             </li>
-            {Object.entries(services).map(([service, data]) => (
-              <li className="mr-2" key={service}>
-                <button
-                  className={`inline-block p-4 rounded-t-lg ${activeService === service ? `border-b-2 border-${data.color}-500 text-${data.color}-600 font-semibold` : 'hover:text-gray-600 hover:border-gray-300'}`}
-                  onClick={() => setActiveService(service as Service)}
-                >
-                  {service.charAt(0).toUpperCase() + service.slice(1)}
-                  {data.isLoading && (
-                    <span className="ml-2 inline-block w-4 h-4 border-2 border-t-transparent border-green-500 rounded-full animate-spin"></span>
-                  )}
-                </button>
-              </li>
-            ))}
+            {Object.entries(services).map(([service, data]) => {
+              // Map dynamic Tailwind classes statically so the compiler does not purge/ignore them
+              const activeClasses =
+                data.color === "green" ? "border-b-2 border-green-500 text-green-600 font-semibold" :
+                data.color === "purple" ? "border-b-2 border-purple-500 text-purple-600 font-semibold" :
+                data.color === "orange" ? "border-b-2 border-orange-500 text-orange-600 font-semibold" :
+                data.color === "emerald" ? "border-b-2 border-emerald-500 text-emerald-600 font-semibold" :
+                "border-b-2 border-yellow-500 text-yellow-600 font-semibold";
+
+              return (
+                <li className="mr-2" key={service}>
+                  <button
+                    className={`inline-block p-4 rounded-t-lg ${activeService === service ? activeClasses : 'hover:text-gray-600 hover:border-gray-300'}`}
+                    onClick={() => setActiveService(service as Service)}
+                  >
+                    {service.charAt(0).toUpperCase() + service.slice(1)}
+                    {data.isLoading && (
+                      <span className="ml-2 inline-block w-4 h-4 border-2 border-t-transparent border-green-500 rounded-full animate-spin"></span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         </div>
 

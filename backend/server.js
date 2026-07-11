@@ -46,8 +46,11 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// Global shared browser promise to avoid race conditions
+let globalBrowserPromise = null;
+
 // Client tracking maps
-const browsers = new Map(); // Structure: { cid: { svc: browser } }
+const browsers = new Map(); // Keep map for backward compatibility, but we use contexts or the shared browser
 const pages = new Map();    // Structure: { cid: { svc: page } }
 const locSet = new Map();   // Structure: { cid: { svc: bool } }
 
@@ -179,7 +182,8 @@ async function handleSetLocation(socket, cid, data) {
     !pgs ||
     !pgs.blinkit ||
     !pgs.zepto ||
-    !pgs.instamart
+    !pgs.instamart ||
+    !pgs.bigbasket
   ) {
     socket.send(
       JSON.stringify({
@@ -208,8 +212,8 @@ async function handleSetLocation(socket, cid, data) {
 
   const servicesToUpdate =
     svcs && Array.isArray(svcs) && svcs.length > 0
-      ? svcs.filter((s) => ["blinkit", "zepto", "instamart"].includes(s))
-      : ["blinkit", "zepto", "instamart"];
+      ? svcs.filter((s) => ["blinkit", "zepto", "instamart", "bigbasket"].includes(s))
+      : ["blinkit", "zepto", "instamart", "bigbasket"];
   if (servicesToUpdate.length === 0) {
     socket.send(
       JSON.stringify({
@@ -229,7 +233,7 @@ async function handleSetLocation(socket, cid, data) {
       step: "setLocation",
       status: "loading",
       message:
-        servicesToUpdate.length === 3
+        servicesToUpdate.length === SVCS.length
           ? `Setting location to ${location} on all services...`
           : `Setting location to ${location} on ${servicesToUpdate.join(
               ", "
@@ -357,7 +361,8 @@ async function handleSearch(ws, clientId, data) {
     !searchPages ||
     !searchPages.blinkit ||
     !searchPages.zepto ||
-    !searchPages.instamart
+    !searchPages.instamart ||
+    !searchPages.bigbasket
   ) {
     ws.send(
       JSON.stringify({
@@ -727,14 +732,19 @@ async function handleSearch(ws, clientId, data) {
 }
 
 async function handleCloseBrowser(ws, clientId, data) {
-  // Close all browsers if they exist
-  const clientBrowsers = activeBrowsers.get(clientId);
-  if (clientBrowsers) {
+  // Close all browser contexts / pages if they exist
+  const clientPages = activePages.get(clientId);
+  if (clientPages) {
     const closePromises = [];
 
     for (const service of SVCS) {
-      if (clientBrowsers[service]) {
-        closePromises.push(clientBrowsers[service].close());
+      const p = clientPages[service];
+      if (p) {
+        if (p._clientContext) {
+          closePromises.push(p._clientContext.close());
+        } else {
+          closePromises.push(p.close());
+        }
       }
     }
 
@@ -748,7 +758,7 @@ async function handleCloseBrowser(ws, clientId, data) {
       JSON.stringify({
         status: "success",
         action: "close",
-        message: "All browsers closed successfully.",
+        message: "All browser contexts closed successfully.",
       })
     );
   } else {
@@ -756,7 +766,7 @@ async function handleCloseBrowser(ws, clientId, data) {
       JSON.stringify({
         status: "error",
         action: "close",
-        message: "No active browsers to close.",
+        message: "No active browser contexts to close.",
       })
     );
   }
@@ -765,25 +775,29 @@ async function handleCloseBrowser(ws, clientId, data) {
 const stealthUtils = require("./stealthUtils");
 
 // Browser management functions
-async function initBrowser(cid, svc) {
-  try {
-    // Check if browser already exists for this client/service
-    if (browsers.get(cid)[svc]) {
-      return browsers.get(cid)[svc];
-    }
-
-    // Launch browser with appropriate settings
-    const b = await puppet.launch({
+async function getGlobalBrowser() {
+  if (!globalBrowserPromise) {
+    console.log("Launching shared global Puppeteer browser...");
+    globalBrowserPromise = puppet.launch({
       headless: "new",
       args: stealthUtils.LAUNCH_ARGS,
       executablePath: process.env.PUPPETEER_EXEC_PATH,
     });
+  }
+  return globalBrowserPromise;
+}
 
-    // Store browser reference
+async function initBrowser(cid, svc) {
+  try {
+    const b = await getGlobalBrowser();
+    // Return mock/dummy reference for compatibility with existing client map structure
+    if (!browsers.get(cid)) {
+      browsers.set(cid, {});
+    }
     browsers.get(cid)[svc] = b;
     return b;
   } catch (err) {
-    console.error(`Error initializing browser for ${svc}:`, err);
+    console.error(`Error getting shared browser for ${svc}:`, err);
     throw new Error(`Failed to initialize browser: ${err.message}`);
   }
 }
@@ -795,9 +809,14 @@ async function getPage(cid, svc, browser) {
       return pages.get(cid)[svc];
     }
 
-    // Create new page with appropriate settings
-    const p = await browser.newPage();
+    // Create a lightweight, isolated browser context for each client session
+    console.log(`Creating lightweight, isolated browser context for client ${cid} - ${svc}...`);
+    const context = await browser.createBrowserContext();
+    const p = await context.newPage();
     await stealthUtils.applyPageStealthInjections(p);
+
+    // Keep reference to the context so we can close it properly
+    p._clientContext = context;
 
     // Store page reference
     pages.get(cid)[svc] = p;
@@ -810,13 +829,17 @@ async function getPage(cid, svc, browser) {
 
 async function cleanup(cid) {
   try {
-    const clientBrowsers = browsers.get(cid);
-    if (clientBrowsers) {
-      // Close all browsers for this client
+    const clientPages = pages.get(cid);
+    if (clientPages) {
       for (const svc of SVCS) {
-        if (clientBrowsers[svc]) {
-          await clientBrowsers[svc].close();
-          console.log(`Closed ${svc} browser for client ${cid}`);
+        const p = clientPages[svc];
+        if (p) {
+          if (p._clientContext) {
+            await p._clientContext.close();
+            console.log(`Closed lightweight browser context for ${svc} of client ${cid}`);
+          } else {
+            await p.close().catch(() => {});
+          }
         }
       }
     }
@@ -864,9 +887,20 @@ srv.listen(PORT, () => {
 process.on("SIGINT", async () => {
   console.log("Shutting down server...");
   
-  // Close all active browsers
+  // Close all active browser contexts
   for (const [cid] of browsers.entries()) {
     await cleanup(cid);
+  }
+
+  // Close the global browser
+  if (globalBrowserPromise) {
+    try {
+      const browser = await globalBrowserPromise;
+      await browser.close();
+      console.log("Closed global shared browser instance.");
+    } catch (err) {
+      console.error("Error closing global shared browser:", err);
+    }
   }
   
   // Close server
