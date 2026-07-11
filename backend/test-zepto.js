@@ -4,10 +4,16 @@ puppeteer.use(StealthPlugin());
 const { setZeptoLocation } = require('./zepto/set-location');
 const { navigateToSearch, ensureContentLoaded, extractProductInformation } = require('./zepto/searchHelpers');
 
+const stealthUtils = require('./stealthUtils');
+
 async function testZepto() {
   console.log('Launching browser...');
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: stealthUtils.LAUNCH_ARGS,
+  });
   const page = await browser.newPage();
+  await stealthUtils.applyPageStealthInjections(page);
   
   let productJson = null;
   page.on('response', async (response) => {

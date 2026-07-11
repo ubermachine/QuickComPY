@@ -4,10 +4,16 @@ puppeteer.use(StealthPlugin());
 const { setBigbasketLocation } = require('./bigbasket/set-location');
 const { navigateToSearch, ensureContentLoaded, extractProductInformation } = require('./bigbasket/searchHelpers');
 
+const stealthUtils = require('./stealthUtils');
+
 async function testBigbasket() {
   console.log('Launching browser...');
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: stealthUtils.LAUNCH_ARGS,
+  });
   const page = await browser.newPage();
+  await stealthUtils.applyPageStealthInjections(page);
   
   let productJson = null;
   page.on('response', async (response) => {

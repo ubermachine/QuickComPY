@@ -4,10 +4,16 @@ puppeteer.use(StealthPlugin());
 const { setInstamartLocation } = require('./instamart/set-location');
 const { navigateToSearch, ensureContentLoaded, extractProductInformation } = require('./instamart/searchHelpers');
 
+const stealthUtils = require('./stealthUtils');
+
 async function testInstamart() {
   console.log('Launching browser...');
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: stealthUtils.LAUNCH_ARGS,
+  });
   const page = await browser.newPage();
+  await stealthUtils.applyPageStealthInjections(page);
   
   let productJson = null;
   page.on('response', async (response) => {

@@ -4,10 +4,16 @@ puppeteer.use(StealthPlugin());
 const { setBlinkitLocation } = require('./blinkit/set-location');
 const { navigateToSearch, ensureContentLoaded, extractProductInformation } = require('./blinkit/searchHelpers');
 
+const stealthUtils = require('./stealthUtils');
+
 async function test() {
   console.log('Launching browser...');
-  const browser = await puppeteer.launch({ headless: "new" });
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: stealthUtils.LAUNCH_ARGS,
+  });
   const page = await browser.newPage();
+  await stealthUtils.applyPageStealthInjections(page);
   
   // Set up network interception for blinkit
   let productJson = null;
