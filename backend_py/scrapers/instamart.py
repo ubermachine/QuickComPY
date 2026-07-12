@@ -74,14 +74,11 @@ async def search(page, search_term):
             await asyncio.sleep(2)
         search_url = f"https://www.swiggy.com/instamart/search?query={encoded}"
         await page.get(search_url)
+        await asyncio.sleep(5)
         
         html = await page.get_content()
-        if "challenge-container" in html or "AwsWafIntegration" in html or "Something went wrong" in html or "Try Again" in html:
+        if "challenge-container" in html or "AwsWafIntegration" in html:
             print("[Instamart] WAF challenge detected, waiting for resolution...")
-            await page.evaluate("""
-                const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.includes('Try Again'));
-                if (btn) btn.click();
-            """)
             await asyncio.sleep(4)
             await page.reload()
             await asyncio.sleep(4)
@@ -92,99 +89,86 @@ async def search(page, search_term):
         return []
 
 async def extract_from_html(page):
-    """Extract products from Instamart rendered page"""
+    """Extract products from Instamart rendered page using BeautifulSoup"""
     try:
-        return await page.evaluate("""() => {
-            const products = [];
-            const candidates = new Set();
-            
-            // Find product-like elements containing prices
-            const allEls = document.querySelectorAll('a, div, section');
-            for (const el of allEls) {
-                const t = (el.textContent || '').trim();
-                if (t.includes('₹') && t.length > 30 && t.length < 2000) {
-                    // Walk up to find the card boundary
-                    let card = el;
-                    for (let i = 0; i < 5; i++) {
-                        if (!card || card === document.body) break;
-                        const ct = (card.textContent || '').trim();
-                        if (card.querySelector('img') && 
-                            ct.includes('₹') && 
-                            ct.length > 50 && ct.length < 3000 &&
-                            (ct.includes('min') || ct.includes('mins') || ct.length > 80)) {
-                            candidates.add(card);
-                            break;
-                        }
-                        card = card.parentElement;
-                    }
-                }
-            }
-            
-            for (const card of candidates) {
-                try {
-                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
-                    if (!text || text.length < 20) continue;
+        html = await page.get_content()
+        from bs4 import BeautifulSoup
+        import re
+        
+        soup = BeautifulSoup(html, 'html.parser')
+        products = []
+        
+        # Look for the product card structures we identified earlier
+        # Find all divs that contain an image and have some text
+        item_cards = soup.select('div[data-testid="item-collection-card"]')
+        
+        for card in item_cards:
+            try:
+                root = card.parent
+                if not root: continue
+                
+                img_el = root.find('img')
+                if not img_el or not img_el.get('src'): continue
+                img_url = img_el['src']
+                
+                # Extract all text segments that are direct text or in childless elements
+                text_segments = [el.text.strip() for el in root.find_all(string=True) if el.text.strip()]
+                
+                name = "Unknown"
+                quantity = "1 item"
+                price = ""
+                orig_price = ""
+                discount = ""
+                
+                # Name is usually after MINS
+                for i, t in enumerate(text_segments):
+                    if "MINS" in t.upper() and i + 1 < len(text_segments):
+                        name = text_segments[i+1]
+                        break
+                
+                if name == "Unknown" and len(text_segments) > 1:
+                    name = text_segments[1]
                     
-                    // Extract name - text before first ₹
-                    const parts = text.split('₹');
-                    let name = parts[0].trim();
-                    if (!name || name.length < 2) continue;
-                    name = name.replace(/^\\s*(ADD|\\+|\\d+)\\s*/i, '').trim();
+                # Quantity
+                for t in text_segments:
+                    if re.search(r'(Pieces|Piece|g|kg|ml|L|Pack)', t, re.I) and len(t) < 25 and "MINS" not in t.upper():
+                        quantity = t
+                        break
+                        
+                # Prices (numbers only)
+                nums = [t for t in text_segments if re.match(r'^\d+$', t)]
+                if nums:
+                    price = "₹" + nums[0]
+                    orig_price = "₹" + nums[1] if len(nums) > 1 else price
                     
-                    // Extract prices
-                    const priceMatches = text.match(/₹[0-9,.]+/g) || [];
-                    let price = 'N/A';
-                    let origPrice = null;
-                    if (priceMatches.length >= 1) price = priceMatches[0].trim();
-                    if (priceMatches.length >= 2) {
-                        const second = priceMatches[1].trim();
-                        if (second !== price) origPrice = second;
-                    }
+                # Discount
+                for t in text_segments:
+                    if "% OFF" in t:
+                        discount = t
+                        break
+                        
+                # Duplicate check
+                if any(p['name'] == name for p in products):
+                    continue
                     
-                    // Quantity
-                    let quantity = '1 item';
-                    const qtyMatch = text.match(/(\\d+\\s*(g|kg|ml|l|pc|pcs|pack|piece|count))/i);
-                    if (qtyMatch) quantity = qtyMatch[1];
-                    
-                    // Image
-                    const img = card.querySelector('img');
-                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
-                    
-                    let savings = null;
-                    let discount = null;
-                    if (price !== 'N/A' && origPrice) {
-                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
-                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
-                        if (mrpVal > spVal) {
-                            savings = '₹' + (mrpVal - spVal).toFixed(2);
-                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
-                        }
-                    }
-                    
-                    products.push({
-                        id: 'im_' + products.length,
-                        name: name.substring(0, 200),
-                        price,
-                        originalPrice: origPrice,
-                        savings,
-                        quantity,
-                        deliveryTime: '15 mins',
-                        discount,
-                        imageUrl,
-                        available: true,
-                        source: 'instamart'
-                    });
-                } catch(e) {}
-            }
-            
-            const seen = new Set();
-            return products.filter(p => {
-                const key = p.name.substring(0, 20);
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            }).slice(0, 50);
-        }""")
+                if nums:
+                    products.append({
+                        'id': 'im_' + str(len(products)),
+                        'name': name,
+                        'price': price,
+                        'originalPrice': orig_price,
+                        'savings': None,
+                        'quantity': quantity,
+                        'deliveryTime': '15 mins',
+                        'discount': discount,
+                        'imageUrl': img_url,
+                        'available': True,
+                        'source': 'instamart'
+                    })
+            except Exception as e:
+                pass
+                
+        return products
     except Exception as e:
         print(f"[Instamart] HTML extraction error: {e}")
         return []

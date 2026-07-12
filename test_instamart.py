@@ -21,8 +21,13 @@ async def main():
         html = await page2.get_content()
         with open("im_debug.html", "w", encoding="utf-8") as f:
             f.write(html)
+        
+        inner_text = await page2.evaluate("() => document.body.innerText")
+        with open("im_debug_text.txt", "w", encoding="utf-8") as f:
+            f.write(str(inner_text))
+            
         await page2.save_screenshot("im_debug.png")
-        print("Saved debug screenshot and HTML")
+        print("Saved debug screenshot, HTML, and innerText")
     finally:
         await browser.stop()
 
