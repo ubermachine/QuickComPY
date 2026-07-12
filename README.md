@@ -1,56 +1,73 @@
 # QuickCom Scraper
 
-QuickCom is a web application that helps you find and compare product prices across Blinkit, Bigbasket, and JioMart. Instead of checking each app individually, you can search once and see all the options, saving you time and money when ordering groceries or essentials.
+QuickCom is a web application that helps you find and compare product prices across Blinkit, Bigbasket, JioMart, and Zepto. Instead of checking each app individually, you can search once and see all the options, saving you time and money when ordering groceries or essentials.
+
+## Supported Platforms
+
+| Platform | Status |
+|----------|--------|
+| ✅ Blinkit | Working — 24+ products with complete data (prices, discounts, quantities) |
+| ✅ Bigbasket | Working — CDP stealth injection bypasses Akamai detection |
+| ✅ JioMart | Working — 50+ products with complete data |
+| ✅ Zepto | Working — CDP stealth injection bypasses bot detection |
+| ❌ Instamart (Swiggy) | Blocked by AWS WAF challenge.js — requires Go awswaf solver |
 
 ## Demo
 
-### Location Setting & Search Interface
 ![Location and Search Interface](./screenshots/quickcom-search-interface.png)
-
-### Product Results Across Platforms
 ![Product Results](./screenshots/quickcom-results.png)
 
 ## Features
 
-- **Multi-platform Search**: Find products across multiple platforms with one search
+- **Multi-platform Search**: Find products across 4 platforms with one search
 - **Location-based Results**: Set your location once to get accurate delivery options
 - **Real-time Comparison**: See prices and delivery times side by side
 - **Visual Indicators**: Easily spot discounts and best deals
 - **Responsive Design**: Works well on both desktop and mobile
-- **Live Updates**: Results appear as they're found thanks to WebSocket integration
+- **Live Updates**: Results appear as they're found
 - **Complete Product Info**: See quantity, price, discounts, and delivery times
+- **Stealth Anti-Detection**: CDP-level stealth injection bypasses Akamai and bot detection
+
+## Technology Stack
+
+### Backend
+- **Python 3.14** — Programming language
+- **Zendriver** — Browser automation with CDP stealth injection
+- **Playwright** — Web automation engine (underlying Zendriver)
+
+### Frontend
+- **Streamlit** — UI framework
+- **websocket-client** — Communication library
 
 ## Project Structure
 
 ```
 QuickCom/
-├── backend_py/                # Python backend server
+├── backend_py/                # Python backend
 │   ├── scrapers/              # Individual store scrapers
-│   │   ├── blinkit.py
-│   │   ├── bigbasket.py
-│   │   └── jiomart.py
-│   ├── server.py              # Main FastAPI server
-│   └── stealth.py             # Playwright stealth utilities
-├── streamlit/                 # Python Streamlit Frontend
+│   │   ├── blinkit.py         # Blinkit scraper (CDP API interception)
+│   │   ├── bigbasket.py       # Bigbasket scraper (cookie location + DOM extraction)
+│   │   ├── jiomart.py         # JioMart scraper (HTML extraction)
+│   │   └── zepto.py           # Zepto scraper (data-slot-id extraction)
+│   ├── awswaf/                # AWS WAF challenge solver (for future use)
+│   │   ├── aws.py             # WAF solver main class
+│   │   ├── verify.py          # Challenge verification (sha256, scrypt, network_bandwidth)
+│   │   ├── fingerprint.py     # Browser fingerprint generation
+│   │   └── crypto.py          # Encryption utilities
+│   └── __init__.py
+├── streamlit/                 # Streamlit Frontend
 │   └── app.py                 # Main UI application
 ├── requirements.txt           # Python Dependencies
 └── README.md                  # This documentation
 ```
 
-## Technology Stack
+## Installation
 
-### Backend
-- **Python** - Programming language
-- **FastAPI** - Web framework
-- **WebSocket** - Real-time communication
-- **Playwright** - Web automation and scraping
+### Prerequisites
+- Python 3.14+
+- Chrome/Chromium browser (for Zendriver automation)
 
-### Frontend
-- **Python** - Programming language
-- **Streamlit** - UI framework
-- **websocket-client** - WebSocket communication library
-
-### Installation
+### Setup
 
 1. **Clone the Repository:**
 ```shell
@@ -66,26 +83,40 @@ playwright install chromium
 
 ### Running the Application
 
-1. **Start the Backend Server:**
-```shell
-python backend_py/server.py
-```
-The backend will run on `http://localhost:5000`
-
-2. **Start the Streamlit Application (in a new terminal):**
 ```shell
 streamlit run streamlit/app.py
 ```
 The frontend will run on `http://localhost:8501`
 
-3. **Access the Dashboard:**
-Open your browser and navigate to `http://localhost:8501`
+## How It Works
 
-## 📝 License
+Each scraper uses **Zendriver** (a modern headless browser automation library) to:
+1. Set location via CDP cookie injection (no UI interaction needed for most sites)
+2. Navigate to the search page
+3. Extract product data from the rendered DOM or intercepted API responses
+4. Structure and return product information
+
+### Anti-Detection
+
+The app uses **CDP-level stealth injection** via `Page.addScriptToEvaluateOnNewDocument` to:
+- Hide `navigator.webdriver` flag
+- Spoof `navigator.plugins` and `navigator.languages`
+- Set realistic `navigator.hardwareConcurrency`
+- Configure custom user agent and WebRTC disabling
+
+This bypasses Akamai and standard bot detection systems used by Bigbasket and Zepto.
+
+### AWS WAF Solver
+
+The `backend_py/awswaf/` module can solve AWS WAF challenges programmatically:
+- Supports sha256 proof-of-work, scrypt, and network_bandwidth challenge types
+- Generates valid `aws-waf-token` values
+- Token authentication requires the Go `tls-client` library for perfect TLS fingerprinting
+
+## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
 
 ---
 
 Happy shopping and happy scraping! 🚀
-# QuickComPY

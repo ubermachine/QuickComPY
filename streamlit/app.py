@@ -7,7 +7,7 @@ import asyncio
 import time
 import threading
 import zendriver as zd
-from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto, instamart
+from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto
 
 # --- Premium Custom CSS ---
 st.set_page_config(page_title="QuickCom", layout="wide", initial_sidebar_state="collapsed")
@@ -29,18 +29,16 @@ st.markdown("""
     .bg-bigbasket { background: linear-gradient(90deg, #84cc16, #65a30d); }
     .bg-jiomart { background: linear-gradient(90deg, #3b82f6, #2563eb); }
     .bg-zepto { background: linear-gradient(90deg, #8b5cf6, #6d28d9); }
-    .bg-instamart { background: linear-gradient(90deg, #f97316, #ea580c); }
 </style>
 """, unsafe_allow_html=True)
 
 # Define Scraping Services
-SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto", "instamart"]
+SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto"]
 SCRAPERS = {
     "blinkit": blinkit,
     "bigbasket": bigbasket,
     "jiomart": jiomart,
     "zepto": zepto,
-    "instamart": instamart
 }
 
 # Stealth JS to evade bot detection (injected into every page before any JS runs)
@@ -198,7 +196,6 @@ if 'services' not in st.session_state:
         'bigbasket': {'products': [], 'status': 'idle'},
         'jiomart': {'products': [], 'status': 'idle'},
         'zepto': {'products': [], 'status': 'idle'},
-        'instamart': {'products': [], 'status': 'idle'}
     }
 
 st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>⚡ QuickCom Search</h1>", unsafe_allow_html=True)
