@@ -20,7 +20,8 @@ st.markdown("""
     header .st-emotion-cache-18ni7ap { background: transparent !important; }
     .stButton button { background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); }
     .stButton button:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
-    .stTextInput input { background: rgba(255,255,255,0.08); color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); }
+    .stTextInput input { background: rgba(255,255,255,0.12); color: #0f172a; border: 1px solid rgba(255,255,255,0.25); }
+    .stTextInput input::placeholder { color: #94a3b8; }
     .stTextInput label { color: #f8fafc !important; }
     .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px; transition: transform 0.2s, box-shadow 0.2s; height: 100%; display: flex; flex-direction: column; }
     .glass-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(255, 255, 255, 0.2); }
