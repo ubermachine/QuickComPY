@@ -66,7 +66,7 @@ async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[Zepto] Searching for: {search_term}")
     try:
-        await page.get(f"https://www.zepto.com/search?q={encoded}")
+        await page.get(f"https://www.zepto.com/search?query={encoded}")
         await asyncio.sleep(3)
         return await extract_from_html(page)
     except Exception as e:
@@ -150,7 +150,7 @@ async def extract_from_html(page):
                         source: 'zepto'
                     });
                 } catch(e) {}
-            });
+            }
             
             return products;
         })()""")
