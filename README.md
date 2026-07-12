@@ -1,6 +1,6 @@
 # QuickCom Scraper
 
-QuickCom is a web application that helps you find and compare product prices across Blinkit, Zepto, and Swiggy Instamart. Instead of checking each app individually, you can search once and see all the options, saving you time and money when ordering groceries or essentials.
+QuickCom is a web application that helps you find and compare product prices across Blinkit, Bigbasket, and JioMart. Instead of checking each app individually, you can search once and see all the options, saving you time and money when ordering groceries or essentials.
 
 ## Demo
 
@@ -24,85 +24,62 @@ QuickCom is a web application that helps you find and compare product prices acr
 
 ```
 QuickCom/
-├── backend/                   # Node.js backend server
-│   ├── blinkit/               # Blinkit-specific code
-│   │   ├── searchHelpers.js   # Search and data extraction
-│   │   └── set-location.js    # Location handling
-│   ├── zepto/                 # Zepto-specific code
-│   │   ├── searchHelpers.js   # Search and data extraction
-│   │   └── set-location.js    # Location handling
-│   ├── instamart/             # Swiggy Instamart-specific code
-│   │   ├── searchHelpers.js   # Search and data extraction
-│   │   └── set-location.js    # Location handling
-│   ├── server.js              # Main server file
-│   └── package.json           # Dependencies
-├── frontend/                  # React frontend
-│   ├── src/
-│   │   ├── components/        # UI components
-│   │   │   ├── SearchForm.tsx # Search interface
-│   │   │   ├── ProductList.tsx # Product display
-│   │   │   └── ui/            # UI elements
-│   │   ├── assets/            # Images and icons
-│   │   ├── App.tsx            # Main app component
-│   │   └── main.tsx           # Entry point
-│   └── package.json           # Dependencies
+├── backend_py/                # Python backend server
+│   ├── scrapers/              # Individual store scrapers
+│   │   ├── blinkit.py
+│   │   ├── bigbasket.py
+│   │   └── jiomart.py
+│   ├── server.py              # Main FastAPI server
+│   └── stealth.py             # Playwright stealth utilities
+├── streamlit/                 # Python Streamlit Frontend
+│   └── app.py                 # Main UI application
+├── requirements.txt           # Python Dependencies
 └── README.md                  # This documentation
 ```
 
 ## Technology Stack
 
 ### Backend
-- **Node.js** - JavaScript runtime
-- **Express** - Web framework
+- **Python** - Programming language
+- **FastAPI** - Web framework
 - **WebSocket** - Real-time communication
-- **Puppeteer** - Web automation and scraping
-- **dotenv** - Environment configuration
+- **Playwright** - Web automation and scraping
 
 ### Frontend
-- **React** - UI framework
-- **TypeScript** - Type-safe JavaScript
-- **Tailwind CSS** - Styling framework
-- **shadcn/ui** - Component library
-- **Vite** - Build tool
+- **Python** - Programming language
+- **Streamlit** - UI framework
+- **websocket-client** - WebSocket communication library
 
 ### Installation
 
 1. **Clone the Repository:**
-```bash
+```shell
 git clone https://github.com/yourusername/QuickCom.git
 cd QuickCom
 ```
 
-2. **Install Backend Dependencies:**
-```bash
-cd backend
-npm install
-```
-
-3. **Install Frontend Dependencies:**
-```bash
-cd frontend
-npm install
+2. **Install Dependencies:**
+```shell
+pip install -r requirements.txt
+playwright install chromium
 ```
 
 ### Running the Application
 
 1. **Start the Backend Server:**
-```bash
-cd backend
-npm start
+```shell
+python backend_py/server.py
 ```
 The backend will run on `http://localhost:5000`
 
-2. **Start the Frontend Development Server:**
-```bash
-cd frontend
-npm run dev
+2. **Start the Streamlit Application (in a new terminal):**
+```shell
+streamlit run streamlit/app.py
 ```
-The frontend will run on `http://localhost:5173`
+The frontend will run on `http://localhost:8501`
 
 3. **Access the Dashboard:**
-Open your browser and navigate to `http://localhost:5173`
+Open your browser and navigate to `http://localhost:8501`
 
 ## 📝 License
 
@@ -111,5 +88,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 Happy shopping and happy scraping! 🚀
-# QuickComPY
 # QuickComPY
