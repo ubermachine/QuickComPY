@@ -52,8 +52,22 @@ def get_browser_and_loop():
     def run_loop_and_browser():
         asyncio.set_event_loop(loop)
         try:
-            # Start browser natively on the loop's thread
-            browser = loop.run_until_complete(zd.start(config=zd.Config(sandbox=False, headless=True)))
+            # Start browser with stealth configuration
+            stealth_config = zd.Config(
+                sandbox=False,
+                headless=True,
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+                browser_args=[
+                    '--disable-blink-features=AutomationControlled',
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-infobars',
+                    '--window-size=1920,1080',
+                    '--disable-gpu',
+                ],
+                disable_webrtc=True,
+            )
+            browser = loop.run_until_complete(zd.start(config=stealth_config))
             loop.zendriver_browser = browser
             
             # Initialize global semaphore for scraping concurrency limits
