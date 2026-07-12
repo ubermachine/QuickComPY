@@ -43,7 +43,7 @@ QuickCom/
 - **Python** - Programming language
 - **FastAPI** - Web framework
 - **WebSocket** - Real-time communication
-- **Playwright** - Web automation and scraping
+- **Zendriver** - Web automation and scraping
 
 ### Frontend
 - **Python** - Programming language
