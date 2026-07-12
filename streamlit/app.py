@@ -15,7 +15,13 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
     html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
-    .stApp { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); color: #f8fafc; }
+    .stApp { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); }
+    header { background: transparent !important; }
+    header .st-emotion-cache-18ni7ap { background: transparent !important; }
+    .stButton button { background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); }
+    .stButton button:hover { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
+    .stTextInput input { background: rgba(255,255,255,0.08); color: #f8fafc; border: 1px solid rgba(255,255,255,0.15); }
+    .stTextInput label { color: #f8fafc !important; }
     .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px; transition: transform 0.2s, box-shadow 0.2s; height: 100%; display: flex; flex-direction: column; }
     .glass-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(255, 255, 255, 0.2); }
     .product-img { width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.9); padding: 8px; }
@@ -202,7 +208,7 @@ st.markdown("<h1 style='text-align: center; margin-bottom: 2rem;'>⚡ QuickCom S
 
 # Location Input Section
 st.markdown("### 📍 Select Delivery Location")
-preset_col1, preset_col2, preset_col3, preset_col4, _ = st.columns([1,1,1,1,4])
+preset_col1, preset_col2, preset_col3, preset_col4 = st.columns(4)
 presets = [("Noida", "201306"), ("Mumbai", "400001"), ("Delhi", "110001"), ("Bangalore", "560001")]
 
 if 'manual_loc' not in st.session_state:
