@@ -60,93 +60,68 @@ async def search(page, search_term):
 
     try:
         await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
-        await asyncio.sleep(4)
+        await asyncio.sleep(5)
 
-        # Extract products from the rendered DOM
-        return await extract_from_html(page)
+        products = await extract_from_html(page)
+
+        if not products:
+            print("[Bigbasket] No products found, retrying after 3s...")
+            await asyncio.sleep(3)
+            products = await extract_from_html(page)
+
+        return products
     except Exception as e:
         print(f"[Bigbasket] Search error: {e}")
         return []
 
 async def extract_from_html(page):
-    """Extract products from Bigbasket rendered Next.js page using DOM analysis"""
+    """Extract products from Bigbasket rendered Next.js page"""
     try:
-        return await page.evaluate("""() => {
-            const products = [];
-            
-            // Find product cards by looking for images near prices
-            const candidates = new Set();
-            const images = document.querySelectorAll('img[src*="bbassets"], img[src*="bigbasket"], img[src*="bb"]');
-            
-            if (images.length === 0) {
-                // Fallback: find any img near ₹ text
-                const allImgs = document.querySelectorAll('img');
-                for (const img of allImgs) {
-                    let card = img.parentElement;
-                    for (let i = 0; i < 8 && card; i++) {
-                        const ct = (card.textContent || '');
-                        if (ct.includes('₹') && ct.length > 50 && ct.length < 3000) {
-                            candidates.add(card);
-                            break;
-                        }
-                        card = card.parentElement;
-                    }
-                }
-            } else {
-                images.forEach(img => {
-                    let card = img.parentElement;
-                    for (let i = 0; i < 8 && card; i++) {
-                        const ct = (card.textContent || '');
-                        if (ct.includes('₹') && ct.length > 50 && ct.length < 3000) {
-                            candidates.add(card);
-                            break;
-                        }
-                        card = card.parentElement;
-                    }
-                });
-            }
-            
-            // Method 2: Also look at list items in grids
-            document.querySelectorAll('li, [class*="product"], [class*="sku"], [class*="card"]').forEach(el => {
-                const t = el.textContent || '';
-                if (t.includes('₹') && t.length > 50 && t.length < 3000) {
-                    candidates.add(el);
-                }
-            });
-            
-            for (const card of candidates) {
+        return await page.evaluate("""(function() {
+            var products = [];
+            var allLi = document.querySelectorAll('li');
+            for (var i = 0; i < allLi.length; i++) {
+                var li = allLi[i];
+                var text = (li.textContent || '').replace(/\\s+/g, ' ').trim();
+                if (text.indexOf('\\u20B9') < 0 || text.length < 35) continue;
+                if (text.indexOf('Shop by') >= 0 || text.indexOf('Category') >= 0 || text.indexOf('Filter') >= 0) continue;
+                
                 try {
-                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
+                    var img = li.querySelector('img');
+                    var imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
                     
-                    // Extract image
-                    const img = card.querySelector('img');
-                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
-                    if (!imageUrl && !text.includes('₹')) continue;
+                    var parts = text.split('\\u20B9');
+                    if (parts.length < 2) continue;
                     
-                    // Extract name - usually the longest text before ₹
-                    const parts = text.split('₹');
-                    let name = parts[0].trim();
-                    // Clean up name
-                    name = name.replace(/^\\d+\\s*/, '').replace(/\\s+/g, ' ').trim();
+                    var beforePrice = parts[0].trim();
+                    beforePrice = beforePrice.replace(/^\\d+\\s*mins?\\s*/i, '').trim();
+                    beforePrice = beforePrice.replace(/\\b(?:ADD|Add|add|BUY|Buy|buy)\\s*$/i, '').trim();
+                    beforePrice = beforePrice.replace(/\\(?[\\d.]+[kK]?\\)?\\s*$/, '').trim();
+                    
+                    var name = beforePrice.replace(/^\\d+\\s*/, '').trim();
                     if (!name || name.length < 3) continue;
                     
-                    // Extract prices
-                    const prices = text.match(/₹[0-9,.]+/g) || [];
-                    const price = prices.length > 0 ? prices[0].trim() : 'N/A';
-                    const origPrice = (prices.length > 1 && prices[1] !== price) ? prices[1].trim() : null;
+                    var priceMatch = text.match(/\\u20B9\\s*[\\d,]+(?:\\.\\d{1,2})?/);
+                    var price = priceMatch ? priceMatch[0].trim() : 'N/A';
                     
-                    // Extract quantity/weight
-                    let quantity = '';
-                    const qtyMatch = text.match(/(\\d+\\s*(g|kg|ml|l|pc|pcs|pack|piece|pouch))/i);
+                    var allPrices = text.match(/\\u20B9\\s*[\\d,]+(?:\\.\\d{1,2})?/g) || [];
+                    var origPrice = (allPrices.length > 1 && allPrices[1] !== price) ? allPrices[1].trim() : null;
+                    
+                    var quantity = '';
+                    var qtyMatch = text.match(/(\\d+\\s*(?:g|kg|ml|l|L|pc|pcs|pack|piece|pouch|strip|tablet|sachet|bottle|box|can|jar|tin|tube|pair|set))\\b/i);
                     if (qtyMatch) quantity = qtyMatch[1];
                     
-                    let savings = null;
-                    let discount = null;
-                    if (price && price !== 'N/A' && origPrice) {
-                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
-                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
+                    var deliveryTime = 'Standard Delivery';
+                    var timeMatch = text.match(/(\\d+)\\s*mins?/i);
+                    if (timeMatch) deliveryTime = timeMatch[0];
+                    
+                    var savings = null;
+                    var discount = null;
+                    if (price !== 'N/A' && origPrice) {
+                        var spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
+                        var mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
                         if (mrpVal > spVal) {
-                            savings = '₹' + (mrpVal - spVal).toFixed(2);
+                            savings = '\\u20B9' + (mrpVal - spVal).toFixed(2);
                             discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
                         }
                     }
@@ -154,28 +129,30 @@ async def extract_from_html(page):
                     products.push({
                         id: 'bb_' + products.length,
                         name: name.substring(0, 200),
-                        price,
+                        price: price,
                         originalPrice: origPrice,
-                        savings,
-                        quantity,
-                        deliveryTime: 'Standard Delivery',
-                        discount,
-                        imageUrl,
-                        available: !text.toLowerCase().includes('out of stock'),
+                        savings: savings,
+                        quantity: quantity,
+                        deliveryTime: deliveryTime,
+                        discount: discount,
+                        imageUrl: imageUrl,
+                        available: text.toLowerCase().indexOf('out of stock') < 0,
                         source: 'bigbasket'
                     });
                 } catch(e) {}
             }
             
-            // Deduplicate by name
-            const seen = new Set();
-            return products.filter(p => {
-                const key = p.name.substring(0, 25);
-                if (seen.has(key)) return false;
-                seen.add(key);
-                return true;
-            }).slice(0, 50);
-        }""")
+            var seen = {};
+            var unique = [];
+            for (var j = 0; j < products.length && unique.length < 8; j++) {
+                var key = products[j].name.substring(0, 25);
+                if (!seen[key]) {
+                    seen[key] = true;
+                    unique.push(products[j]);
+                }
+            }
+            return unique;
+        })()""")
     except Exception as e:
         print(f"[Bigbasket] HTML extraction error: {e}")
         return []

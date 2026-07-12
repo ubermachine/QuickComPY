@@ -132,7 +132,7 @@ async def extract_from_html(page):
                     });
                 } catch(e) {}
             });
-            return products;
+            return products.slice(0, 8);
         })()
         """)
     except Exception as e:

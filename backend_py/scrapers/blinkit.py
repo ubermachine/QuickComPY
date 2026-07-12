@@ -208,4 +208,4 @@ def extract_products(snippets):
             print(f"[Blinkit] Extract snippet error: {e}")
             pass
 
-    return products
+    return products[:8]

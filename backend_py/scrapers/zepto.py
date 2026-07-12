@@ -73,15 +73,39 @@ async def search(page, search_term):
     print(f"[Zepto] Searching for: {search_term}")
     pincode = _pincode or '110001'
     try:
-        # Establish domain, set location cookie, then navigate to search
-        await page.get("https://www.zepto.com/")
+        # Pre-set cookie before any navigation
+        try:
+            await page.send(zd.cdp.network.set_cookie(
+                name='location', value=pincode, domain='.zepto.com', path='/', secure=True
+            ))
+        except Exception:
+            pass
+
+        # Navigate to zepto.com to establish session
+        await page.get(f"https://www.zepto.com/")
         await asyncio.sleep(1)
-        await page.send(zd.cdp.network.set_cookie(
-            name='location', value=pincode, domain='.zepto.com', path='/', secure=True
-        ))
+
+        # Re-set cookie after domain nav (more reliable)
+        try:
+            await page.send(zd.cdp.network.set_cookie(
+                name='location', value=pincode, domain='.zepto.com', path='/', secure=True
+            ))
+        except Exception:
+            pass
+
+        # Navigate to search
         await page.get(f"https://www.zepto.com/search?query={encoded}")
-        await asyncio.sleep(5)
-        return await extract_from_html(page)
+        await asyncio.sleep(6)
+
+        products = await extract_from_html(page)
+
+        # Retry once if 0 products
+        if not products:
+            print("[Zepto] No products found, waiting 3s and retrying...")
+            await asyncio.sleep(3)
+            products = await extract_from_html(page)
+
+        return products
     except Exception as e:
         print(f"[Zepto] Search error: {e}")
         return []
@@ -168,7 +192,7 @@ async def extract_from_html(page):
                 } catch(e) {}
             }
             
-            return products;
+            return products.slice(0, 8);
         })()""")
     except Exception as e:
         print(f"[Zepto] HTML extraction error: {e}")
