@@ -43,6 +43,21 @@ SCRAPERS = {
     "instamart": instamart
 }
 
+# Stealth JS to evade bot detection (injected into every page before any JS runs)
+_STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'plugins', { get: () => [1,2,3,4,5] });
+Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
+window.chrome = { runtime: {} };
+Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
+"""
+
+async def stealth_new_page(browser):
+    """Create a new page with stealth scripts injected that persist across navigations"""
+    page = await browser.get('about:blank', new_tab=True)
+    await page.send(zd.cdp.page.add_script_to_evaluate_on_new_document(source=_STEALTH_JS))
+    return page
+
 # --- Cache Zendriver Browser globally across sessions ---
 @st.cache_resource
 def get_browser_and_loop():
@@ -57,14 +72,6 @@ def get_browser_and_loop():
                 sandbox=False,
                 headless=True,
                 user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
-                browser_args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-infobars',
-                    '--window-size=1920,1080',
-                    '--disable-gpu',
-                ],
                 disable_webrtc=True,
             )
             browser = loop.run_until_complete(zd.start(config=stealth_config))
@@ -116,7 +123,7 @@ async def set_loc_svc(svc, location):
     print(f"Setting location for {svc}")
     page = None
     try:
-        page = await global_browser.get('about:blank', new_tab=True)
+        page = await stealth_new_page(global_browser)
         success = await asyncio.wait_for(SCRAPERS[svc].set_location(page, location), timeout=15.0)
         return svc, success
     except Exception as e:
@@ -146,7 +153,7 @@ async def search_svc(svc, search_term):
     print(f"Searching {svc} for {search_term}")
     page = None
     try:
-        page = await global_browser.get('about:blank', new_tab=True)
+        page = await stealth_new_page(global_browser)
         products = await asyncio.wait_for(SCRAPERS[svc].search(page, search_term), timeout=30.0)
         return svc, products
     except Exception as e:
