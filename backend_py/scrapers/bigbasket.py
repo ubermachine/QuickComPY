@@ -96,6 +96,7 @@ async def extract_from_html(page):
                     var beforePrice = parts[0].trim();
                     beforePrice = beforePrice.replace(/^\\d+\\s*mins?\\s*/i, '').trim();
                     beforePrice = beforePrice.replace(/\\b(?:ADD|Add|add|BUY|Buy|buy)\\s*$/i, '').trim();
+                    beforePrice = beforePrice.replace(/\\d+\\.?\\d*\\s*Ratings?\\s*/ig, '').trim();
                     beforePrice = beforePrice.replace(/\\(?[\\d.]+[kK]?\\)?\\s*$/, '').trim();
                     
                     var name = beforePrice.replace(/^\\d+\\s*/, '').trim();

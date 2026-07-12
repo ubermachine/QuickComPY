@@ -294,6 +294,7 @@ if has_active_searches:
                     orig_price = f"<span class='original-price'>{product['originalPrice']}</span>" if product.get('originalPrice') else ""
                     discount = f"<span class='discount-badge'>{product['discount']}</span>" if product.get('discount') else ""
                     
+                    discount_div = f'<div style="margin-top:4px;">{discount}</div>' if discount else ''
                     card_html = f"""
                     <div class="glass-card">
                         {img_tag}
@@ -303,7 +304,7 @@ if has_active_searches:
                             <span class="current-price">{product['price']}</span>
                             {orig_price}
                         </div>
-                        <div style="margin-top:4px;">{discount}</div>
+                        {discount_div}
                     </div>
                     """
                     st.markdown(card_html, unsafe_allow_html=True)
