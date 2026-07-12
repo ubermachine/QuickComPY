@@ -61,7 +61,7 @@ async def search(page, search_term):
         if "jiomart.com" not in page.url:
             await page.get("https://www.jiomart.com/")
             await asyncio.sleep(1.5)
-        await page.get(f"https://www.jiomart.com/search/{encoded}")
+        await page.get(f"https://www.jiomart.com/products?q={encoded}")
         await asyncio.sleep(4)
 
         return await extract_from_html(page)

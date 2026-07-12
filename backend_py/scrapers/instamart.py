@@ -30,28 +30,21 @@ async def wait_for_selector(page, selector, timeout=10):
 
 async def set_location(page, location):
     print(f"[Instamart] Attempting to set location to {location}")
-
     city_key = location.lower().strip()
     coords = CITY_COORDINATES.get(city_key, CITY_COORDINATES['bangalore'])
-
     try:
         if "swiggy.com/instamart" not in page.url:
             await page.get("https://www.swiggy.com/instamart")
-
-        # Inject location via JS
         script = f"""
         (() => {{
             const lat = {coords['lat']};
             const lng = {coords['lng']};
             const address = "{coords['address']}";
             const locationData = {{
-                lat: lat,
-                lng: lng,
-                address: address,
+                lat: lat, lng: lng, address: address,
                 area: address.split(',')[0],
                 city: address.split(',')[1] ? address.split(',')[1].trim() : '',
-                areaId: '',
-                latlng: `${{lat}},${{lng}}`
+                areaId: '', latlng: `${{lat}},${{lng}}`
             }};
             try {{ localStorage.setItem('userLocation', JSON.stringify(locationData)); }} catch(e) {{}}
             try {{ localStorage.setItem('swiggy_location', JSON.stringify(locationData)); }} catch(e) {{}}
@@ -60,14 +53,12 @@ async def set_location(page, location):
         }})()
         """
         await page.evaluate(script)
-
         await page.send(zd.cdp.network.set_cookie(
             name='userLocation',
             value=json.dumps({'lat': coords['lat'], 'lng': coords['lng']}),
             domain='.swiggy.com',
             path='/'
         ))
-
         await asyncio.sleep(0.5)
         return True
     except Exception as e:
@@ -77,12 +68,10 @@ async def set_location(page, location):
 async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[Instamart] Searching for: {search_term}")
-
     try:
         if "swiggy.com/instamart" not in page.url:
             await page.get("https://www.swiggy.com/instamart")
             await asyncio.sleep(2)
-
         search_url = f"https://www.swiggy.com/instamart/search?query={encoded}"
         await page.get(search_url)
         
@@ -103,99 +92,99 @@ async def search(page, search_term):
         return []
 
 async def extract_from_html(page):
+    """Extract products from Instamart rendered page"""
     try:
-        return await page.evaluate(r"""
-        (() => {
+        return await page.evaluate("""() => {
             const products = [];
-            const titles = document.querySelectorAll('._1lbNR, [class*="productTitle"], h3');
-            titles.forEach((titleEl, idx) => {
-                try {
-                    let card = titleEl.parentElement;
-                    while(card && card !== document.body && !card.querySelector('img')) {
+            const candidates = new Set();
+            
+            // Find product-like elements containing prices
+            const allEls = document.querySelectorAll('a, div, section');
+            for (const el of allEls) {
+                const t = (el.textContent || '').trim();
+                if (t.includes('₹') && t.length > 30 && t.length < 2000) {
+                    // Walk up to find the card boundary
+                    let card = el;
+                    for (let i = 0; i < 5; i++) {
+                        if (!card || card === document.body) break;
+                        const ct = (card.textContent || '').trim();
+                        if (card.querySelector('img') && 
+                            ct.includes('₹') && 
+                            ct.length > 50 && ct.length < 3000 &&
+                            (ct.includes('min') || ct.includes('mins') || ct.length > 80)) {
+                            candidates.add(card);
+                            break;
+                        }
                         card = card.parentElement;
                     }
-                    if (!card) card = titleEl.closest('div');
+                }
+            }
+            
+            for (const card of candidates) {
+                try {
+                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
+                    if (!text || text.length < 20) continue;
                     
-                    const name = titleEl.textContent.trim();
-                    if (!name || name === 'Unknown') return;
+                    // Extract name - text before first ₹
+                    const parts = text.split('₹');
+                    let name = parts[0].trim();
+                    if (!name || name.length < 2) continue;
+                    name = name.replace(/^\\s*(ADD|\\+|\\d+)\\s*/i, '').trim();
                     
-                    // Use textContent or innerText to extract price and qty
-                    const textLines = (card.innerText || '').split('\\n').map(l => l.trim()).filter(l => l);
-                    
+                    // Extract prices
+                    const priceMatches = text.match(/₹[0-9,.]+/g) || [];
                     let price = 'N/A';
                     let origPrice = null;
+                    if (priceMatches.length >= 1) price = priceMatches[0].trim();
+                    if (priceMatches.length >= 2) {
+                        const second = priceMatches[1].trim();
+                        if (second !== price) origPrice = second;
+                    }
+                    
+                    // Quantity
                     let quantity = '1 item';
-                    let discount = null;
+                    const qtyMatch = text.match(/(\\d+\\s*(g|kg|ml|l|pc|pcs|pack|piece|count))/i);
+                    if (qtyMatch) quantity = qtyMatch[1];
                     
-                    // Look for price line containing ₹
-                    for (let i = 0; i < textLines.length; i++) {
-                        const line = textLines[i];
-                        if (line.includes('₹')) {
-                            // Extract numbers
-                            const parts = line.split('₹');
-                            if (parts.length > 1) {
-                                // Sometimes orig price and current price are on the same line, or separate lines.
-                                const valStr = parts[1].replace(/[^0-9.]/g, '');
-                                if (valStr) price = '₹' + valStr;
-                            }
-                            if (parts.length > 2) {
-                                const valStr2 = parts[2].replace(/[^0-9.]/g, '');
-                                if (valStr2) {
-                                    origPrice = price; // The first was MRP
-                                    price = '₹' + valStr2; // The second is selling price
-                                }
-                            }
-                            break;
-                        }
-                    }
-                    
-                    // Quantity often ends with g, kg, ml, L, pcs
-                    for (let i = 0; i < textLines.length; i++) {
-                        const line = textLines[i].toLowerCase();
-                        if (line.match(/^[0-9.]+\s*(g|kg|ml|l|pc|pcs|pack)$/) || line.match(/^[0-9]+\s*x\s*[0-9]+.*$/)) {
-                            quantity = textLines[i];
-                            break;
-                        }
-                    }
-                    
-                    // Attempt fallback if price still N/A
-                    if (price === 'N/A') {
-                        const priceEl = card.querySelector('[class*="price"], ._2jn41');
-                        if (priceEl && priceEl.textContent.includes('₹')) {
-                            price = '₹' + priceEl.textContent.replace(/[^0-9.]/g, '').trim();
-                        }
-                    }
-                    
-                    const imgEl = card.querySelector('img._16I1D, img[alt], img');
-                    const imageUrl = imgEl ? imgEl.src : '';
+                    // Image
+                    const img = card.querySelector('img');
+                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
                     
                     let savings = null;
+                    let discount = null;
                     if (price !== 'N/A' && origPrice) {
                         const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
                         const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
                         if (mrpVal > spVal) {
                             savings = '₹' + (mrpVal - spVal).toFixed(2);
+                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
                         }
                     }
                     
                     products.push({
-                        id: 'im_' + idx,
-                        name,
+                        id: 'im_' + products.length,
+                        name: name.substring(0, 200),
                         price,
                         originalPrice: origPrice,
                         savings,
                         quantity,
-                        deliveryTime: "15 mins",
+                        deliveryTime: '15 mins',
                         discount,
                         imageUrl,
                         available: true,
                         source: 'instamart'
                     });
                 } catch(e) {}
-            });
-            return products;
-        })()
-        """)
+            }
+            
+            const seen = new Set();
+            return products.filter(p => {
+                const key = p.name.substring(0, 20);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).slice(0, 50);
+        }""")
     except Exception as e:
         print(f"[Instamart] HTML extraction error: {e}")
         return []

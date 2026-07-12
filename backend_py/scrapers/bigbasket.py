@@ -3,77 +3,53 @@ import asyncio
 import json
 import re
 import time
+import zendriver as zd
 
-async def wait_for_selector(page, selector, timeout=10):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            elem = await page.select(selector)
-            if elem:
-                return elem
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
-    return None
+LOCATION_COORDS = {
+    'delhi': '110001', 'new delhi': '110001', 'mumbai': '400001',
+    'bengaluru': '560001', 'bangalore': '560001', 'hyderabad': '500001',
+    'pune': '411001', 'kolkata': '700001', 'chennai': '600001',
+    'ahmedabad': '380001', 'gurgaon': '122001', 'gurugram': '122001',
+    'noida': '201301', '201306': '201306', '110001': '110001',
+    '400001': '400001', '560001': '560001', '201301': '201301',
+}
+
+def resolve_pincode(location):
+    if not location:
+        return '201306'
+    key = str(location).strip().lower()
+    if key in LOCATION_COORDS:
+        return LOCATION_COORDS[key]
+    if re.match(r'^\d{6}$', key):
+        return key
+    for k, v in LOCATION_COORDS.items():
+        if k in key or key in k:
+            return v
+    return '201306'
 
 async def set_location(page, location):
-    print(f"[Bigbasket] Attempting to set location to {location}")
+    """Set location via CDP cookies (no UI interaction needed for BB)"""
+    pincode = resolve_pincode(location)
+    print(f"[Bigbasket] Setting location to pincode {pincode}")
     try:
-        await page.get("https://www.bigbasket.com/")
-    except Exception as e:
-        print(f"[Bigbasket] Error navigating: {e}")
-
-    try:
-        # Find location button by iterating over buttons
-        buttons = await page.select_all("button")
-        location_btn = None
-        for btn in buttons:
-            try:
-                txt = btn.text
-                if txt and any(x in txt for x in ["Select Location", "Deliver to", "Delivery in", "Get it in"]):
-                    location_btn = btn
-                    break
-            except Exception:
-                pass
-        
-        if location_btn:
-            await location_btn.click()
-            await asyncio.sleep(1.5)
-
-            # Find input box by looking at placeholders
-            inputs = await page.select_all("input")
-            input_box = None
-            for inp in inputs:
-                try:
-                    ph = inp.attrs.get("placeholder", "")
-                    if any(x in ph for x in ["Search for area", "Search for your city", "Search for street", "Search for address"]):
-                        input_box = inp
-                        break
-                except Exception:
-                    pass
-
-            if input_box:
-                await input_box.send_keys(location)
-                await asyncio.sleep(2.5)
-
-                suggestions = await page.select_all('ul li, li')
-                target_suggestion = None
-                for sug in suggestions:
-                    try:
-                        sug_txt = sug.text
-                        if sug_txt and any(c.isdigit() for c in sug_txt):
-                            target_suggestion = sug
-                            break
-                    except Exception:
-                        pass
-                
-                if not target_suggestion and suggestions:
-                    target_suggestion = suggestions[0]
-
-                if target_suggestion:
-                    await target_suggestion.click()
-                    await asyncio.sleep(2)
-                    return True
+        domain = '.bigbasket.com'
+        await page.send(zd.cdp.network.set_cookie(name='bb_location', value=pincode, domain=domain, path='/'))
+        await page.send(zd.cdp.network.set_cookie(name='bb_city', value='Noida', domain=domain, path='/'))
+        await page.send(zd.cdp.network.set_cookie(name='bb_state', value='Uttar Pradesh', domain=domain, path='/'))
+        await page.send(zd.cdp.network.set_cookie(name='bb_pincode', value=pincode, domain=domain, path='/'))
+        await page.send(zd.cdp.network.set_cookie(name='bb_lat', value='28.5147', domain=domain, path='/'))
+        await page.send(zd.cdp.network.set_cookie(name='bb_lon', value='77.4855', domain=domain, path='/'))
+        try:
+            await page.get("https://www.bigbasket.com/")
+            await asyncio.sleep(1)
+            await page.evaluate(f"""
+                try {{ localStorage.setItem('bb_pincode', '{pincode}'); }} catch(e){{}}
+                try {{ localStorage.setItem('bb_location', '{pincode}'); }} catch(e){{}}
+            """)
+        except Exception:
+            pass
+        print(f"[Bigbasket] Location cookies injected: {pincode}")
+        return True
     except Exception as e:
         print(f"[Bigbasket] Location set error: {e}")
     return False
@@ -84,113 +60,89 @@ async def search(page, search_term):
 
     try:
         await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
-        await asyncio.sleep(3)
+        await asyncio.sleep(4)
 
-        # We try to extract from __PRELOADED_STATE__ directly
-        html = await page.get_content()
-
-        match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});', html)
-        if match:
-            try:
-                state = json.loads(match.group(1))
-                prods = extract_products_from_state(state)
-                if prods:
-                    return prods
-            except Exception:
-                pass
-
-        # Fallback to direct HTML extraction if state is missing
+        # Extract products from the rendered DOM
         return await extract_from_html(page)
-
     except Exception as e:
         print(f"[Bigbasket] Search error: {e}")
         return []
 
-def extract_products_from_state(state):
-    products = []
-    try:
-        search_data = state.get("searchState", {}).get("searchResult", {})
-        tabs = search_data.get("tabs", [])
-        if not tabs: return products
-
-        raw_products = tabs[0].get("product_info", {}).get("products", [])
-
-        for idx, p in enumerate(raw_products):
-            try:
-                pid = str(p.get("id", f"bb_{idx}"))
-                name = p.get("desc", "Unknown")
-                quantity = p.get("w", "")
-
-                price = "N/A"
-                orig_price = None
-                savings = None
-                discount = None
-
-                pricing = p.get("pricing", {}).get("discount", {})
-                if pricing:
-                    sp = pricing.get("prim_price", {}).get("sp")
-                    mrp = pricing.get("mrp")
-
-                    if sp: price = f"₹{sp}"
-                    if mrp and sp and float(mrp) > float(sp):
-                        orig_price = f"₹{mrp}"
-                        savings = f"₹{float(mrp) - float(sp):.2f}"
-                        discount = f"{int(((float(mrp) - float(sp)) / float(mrp)) * 100)}% OFF"
-
-                images = p.get("images", [])
-                image_url = images[0].get("s", "") if images else ""
-
-                availability = p.get("availability", {})
-                delivery_time = availability.get("short_eta", "Standard Delivery")
-                available = availability.get("avail_status") == "001"
-
-                products.append({
-                    "id": pid,
-                    "name": name,
-                    "price": price,
-                    "originalPrice": orig_price,
-                    "savings": savings,
-                    "quantity": quantity,
-                    "deliveryTime": delivery_time,
-                    "discount": discount,
-                    "imageUrl": image_url,
-                    "available": available,
-                    "source": "bigbasket"
-                })
-            except Exception:
-                pass
-
-    except Exception as e:
-        print(f"[Bigbasket] Extraction error: {e}")
-
-    return products
-
 async def extract_from_html(page):
+    """Extract products from Bigbasket rendered Next.js page using DOM analysis"""
     try:
-        return await page.evaluate("""
-        (() => {
+        return await page.evaluate("""() => {
             const products = [];
-            const cards = document.querySelectorAll('div[class*="SKUDeck___StyledDiv"], [class*="skudeck"], div[class*="SkuDeck___StyledDiv"]');
-            cards.forEach((card, idx) => {
+            
+            // Find product cards by looking for images near prices
+            const candidates = new Set();
+            const images = document.querySelectorAll('img[src*="bbassets"], img[src*="bigbasket"], img[src*="bb"]');
+            
+            if (images.length === 0) {
+                // Fallback: find any img near ₹ text
+                const allImgs = document.querySelectorAll('img');
+                for (const img of allImgs) {
+                    let card = img.parentElement;
+                    for (let i = 0; i < 8 && card; i++) {
+                        const ct = (card.textContent || '');
+                        if (ct.includes('₹') && ct.length > 50 && ct.length < 3000) {
+                            candidates.add(card);
+                            break;
+                        }
+                        card = card.parentElement;
+                    }
+                }
+            } else {
+                images.forEach(img => {
+                    let card = img.parentElement;
+                    for (let i = 0; i < 8 && card; i++) {
+                        const ct = (card.textContent || '');
+                        if (ct.includes('₹') && ct.length > 50 && ct.length < 3000) {
+                            candidates.add(card);
+                            break;
+                        }
+                        card = card.parentElement;
+                    }
+                });
+            }
+            
+            // Method 2: Also look at list items in grids
+            document.querySelectorAll('li, [class*="product"], [class*="sku"], [class*="card"]').forEach(el => {
+                const t = el.textContent || '';
+                if (t.includes('₹') && t.length > 50 && t.length < 3000) {
+                    candidates.add(el);
+                }
+            });
+            
+            for (const card of candidates) {
                 try {
-                    const nameEl = card.querySelector('h3[class*="block m-0"], h3');
-                    const name = nameEl ? nameEl.textContent.trim() : 'Unknown';
+                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
                     
-                    const priceEl = card.querySelector('span[class*="Pricing___StyledLabel"], [class*="pricing"], span[class*="Pricing___StyledLabel2"]');
-                    const price = priceEl ? priceEl.textContent.trim() : 'N/A';
+                    // Extract image
+                    const img = card.querySelector('img');
+                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
+                    if (!imageUrl && !text.includes('₹')) continue;
                     
-                    const origEl = card.querySelector('span[class*="Pricing___StyledLabel2"], [class*="mrp"], span[class*="Pricing___StyledLabel3"]');
-                    const origPrice = (origEl && origEl !== priceEl) ? origEl.textContent.trim() : null;
+                    // Extract name - usually the longest text before ₹
+                    const parts = text.split('₹');
+                    let name = parts[0].trim();
+                    // Clean up name
+                    name = name.replace(/^\\d+\\s*/, '').replace(/\\s+/g, ' ').trim();
+                    if (!name || name.length < 3) continue;
                     
-                    const qtyEl = card.querySelector('span[class*="PackChanger___StyledLabel"], [class*="pack-changer"]');
-                    const quantity = qtyEl ? qtyEl.textContent.trim() : '';
+                    // Extract prices
+                    const prices = text.match(/₹[0-9,.]+/g) || [];
+                    const price = prices.length > 0 ? prices[0].trim() : 'N/A';
+                    const origPrice = (prices.length > 1 && prices[1] !== price) ? prices[1].trim() : null;
                     
-                    const imgEl = card.querySelector('img');
-                    const imageUrl = imgEl ? imgEl.src : '';
+                    // Extract quantity/weight
+                    let quantity = '';
+                    const qtyMatch = text.match(/(\\d+\\s*(g|kg|ml|l|pc|pcs|pack|piece|pouch))/i);
+                    if (qtyMatch) quantity = qtyMatch[1];
                     
                     let savings = null;
                     let discount = null;
-                    if (price && origPrice) {
+                    if (price && price !== 'N/A' && origPrice) {
                         const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
                         const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
                         if (mrpVal > spVal) {
@@ -200,23 +152,30 @@ async def extract_from_html(page):
                     }
                     
                     products.push({
-                        id: 'bb_' + idx,
-                        name,
+                        id: 'bb_' + products.length,
+                        name: name.substring(0, 200),
                         price,
                         originalPrice: origPrice,
                         savings,
                         quantity,
-                        deliveryTime: "Standard Delivery",
+                        deliveryTime: 'Standard Delivery',
                         discount,
                         imageUrl,
-                        available: true,
+                        available: !text.toLowerCase().includes('out of stock'),
                         source: 'bigbasket'
                     });
                 } catch(e) {}
-            });
-            return products;
-        })()
-        """)
+            }
+            
+            // Deduplicate by name
+            const seen = new Set();
+            return products.filter(p => {
+                const key = p.name.substring(0, 25);
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            }).slice(0, 50);
+        }""")
     except Exception as e:
         print(f"[Bigbasket] HTML extraction error: {e}")
         return []

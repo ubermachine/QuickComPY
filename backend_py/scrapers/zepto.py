@@ -1,6 +1,7 @@
 import urllib.parse
 import asyncio
 import time
+import zendriver as zd
 
 async def wait_for_selector(page, selector, timeout=10):
     start = time.time()
@@ -15,46 +16,36 @@ async def wait_for_selector(page, selector, timeout=10):
     return None
 
 async def set_location(page, location):
+    """Set location via page navigation and selection"""
     print(f"[Zepto] Attempting to set location to {location}")
+    pincode = str(location).strip()[:6] if location else '110001'
+    
     try:
         await page.get("https://www.zepto.com/")
         await asyncio.sleep(2)
     except Exception as e:
         print(f"[Zepto] Error navigating: {e}")
+        try:
+            await page.send(zd.cdp.network.set_cookie(name='location', value=pincode, domain='.zepto.com', path='/'))
+        except Exception:
+            pass
 
     try:
-        # Check if already set
-        addr_el = await page.select('[data-testid="user-address"]')
-        if addr_el:
-            txt = addr_el.text
-            if txt and "select" not in txt.lower() and "enter" not in txt.lower():
-                print(f"[Zepto] Location already set: {txt}")
-                return True
-
-        # Click the location button
         location_btn = await page.select('[data-testid="user-address"]')
         if not location_btn:
-            location_btn = await page.select('header button')
-        if not location_btn:
-            location_btn = await page.select('button[aria-label="Select Location"], div[class*="location-select"]')
+            location_btn = await page.select('button[class*="location"], header button')
             
         if location_btn:
             await location_btn.click()
             await asyncio.sleep(1.5)
-
-            # Wait for search box
-            input_box = await page.select('input[placeholder*="Search a new address"], input[data-testid="location-search-input"]')
+            input_box = await page.select('input[placeholder*="Search"], input[data-testid="location-search-input"]')
             if input_box:
-                await input_box.send_keys(location)
+                await input_box.send_keys(pincode)
                 await asyncio.sleep(2.5)
-
-                # Find suggestions
                 suggestions = await page.select_all('ul li, li, [class*="suggestion"], [class*="Suggestion"]')
                 if suggestions:
                     await suggestions[0].click()
                     await asyncio.sleep(2)
-
-                    # Confirm location if dialog/confirm button appears
                     buttons = await page.select_all("button")
                     for btn in buttons:
                         try:
@@ -66,6 +57,7 @@ async def set_location(page, location):
                         except Exception:
                             pass
                     return True
+        return False
     except Exception as e:
         print(f"[Zepto] Location set error: {e}")
     return False
@@ -73,63 +65,69 @@ async def set_location(page, location):
 async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[Zepto] Searching for: {search_term}")
-
     try:
         await page.get(f"https://www.zepto.com/search?q={encoded}")
         await asyncio.sleep(3)
-
         return await extract_from_html(page)
     except Exception as e:
         print(f"[Zepto] Search error: {e}")
         return []
 
 async def extract_from_html(page):
+    """Extract products from Zepto search page"""
     try:
-        return await page.evaluate("""
-        (() => {
+        return await page.evaluate("""(() => {
             const products = [];
-            const cards = document.querySelectorAll('a[data-testid="product-card"], a[href*="/pn/"], [class*="ProductCard"], [data-testid="product-card"]');
-            cards.forEach((card, idx) => {
+            
+            // Find product cards - multiple selectors for resilience
+            const cards = document.querySelectorAll(
+                'a[href*="/pn/"], a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"]'
+            );
+            
+            for (const card of cards) {
                 try {
-                    // Extract name (first text node length > 2 and not starting with a digit/rupee or contains key actions)
-                    const textNodes = [];
-                    const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null, false);
-                    let node;
-                    while (node = walker.nextNode()) {
-                        const t = node.textContent.trim();
-                        if (t.length > 2 && !/^[₹\d]/.test(t) && !t.includes('ADD') && !t.includes('Qty') && !t.includes('mins') && !t.includes('OFF')) {
-                            textNodes.push(t);
-                        }
+                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
+                    if (!text || text.length < 10 || !text.includes('₹')) continue;
+                    
+                    // Name: from data-slot-id or first meaningful text
+                    let name = '';
+                    const nameEl = card.querySelector('[data-slot-id="ProductName"]');
+                    if (nameEl) {
+                        name = nameEl.textContent.trim();
+                    } else {
+                        // Fallback: find text before ₹
+                        const parts = text.split('₹');
+                        name = parts[0].trim();
                     }
-                    const name = textNodes[0] || 'Unknown Product';
-
-                    // Extract price nodes
-                    const priceNodes = [];
-                    const walkerPrice = document.createTreeWalker(card, NodeFilter.SHOW_TEXT, null, false);
-                    while (node = walkerPrice.nextNode()) {
-                        const t = node.textContent.trim();
-                        if (t.startsWith('₹') && /₹\\s*\\d+/.test(t)) {
-                            priceNodes.push(t);
-                        }
-                    }
-                    const price = priceNodes[0] || 'N/A';
-                    const origPrice = (priceNodes[1] && priceNodes[1] !== price) ? priceNodes[1] : null;
-
+                    if (!name || name.length < 2) continue;
+                    
                     // Quantity
-                    const qtyEl = card.querySelector('[class*="packsize"], [class*="Packsize"], [class*="weight"], [class*="Weight"]');
-                    const quantity = qtyEl ? qtyEl.textContent.trim() : '1 item';
-
+                    let quantity = '1 item';
+                    const packEl = card.querySelector('[data-slot-id="PackSize"]');
+                    if (packEl) {
+                        quantity = packEl.textContent.trim();
+                    }
+                    
+                    // Prices using regex
+                    const prices = text.match(/₹[0-9,]+/g) || [];
+                    let price = prices.length > 0 ? '₹' + prices[0].replace(/[^0-9.]/g, '') : 'N/A';
+                    let origPrice = null;
+                    if (prices.length >= 2) {
+                        const second = '₹' + prices[1].replace(/[^0-9.]/g, '');
+                        if (second !== price) origPrice = second;
+                    }
+                    
                     // Image
-                    const imgEl = card.querySelector('img');
-                    const imageUrl = imgEl ? imgEl.src : '';
-
-                    // Available
-                    const cardText = card.textContent || '';
-                    const available = !cardText.toLowerCase().includes('out of stock') && !cardText.toLowerCase().includes('notify');
-
+                    const img = card.querySelector('img');
+                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
+                    
+                    // Availability
+                    const isOutOfStock = (card.textContent || '').toLowerCase().includes('out of stock');
+                    
+                    // Savings
                     let savings = null;
                     let discount = null;
-                    if (price && origPrice) {
+                    if (price !== 'N/A' && origPrice) {
                         const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
                         const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
                         if (mrpVal > spVal) {
@@ -137,25 +135,25 @@ async def extract_from_html(page):
                             discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
                         }
                     }
-
+                    
                     products.push({
-                        id: 'zp_' + idx,
-                        name,
+                        id: 'zp_' + products.length,
+                        name: name.replace(/\\s+/g, ' ').trim(),
                         price,
                         originalPrice: origPrice,
                         savings,
                         quantity,
-                        deliveryTime: "10 mins",
+                        deliveryTime: '10 mins',
                         discount,
                         imageUrl,
-                        available,
+                        available: !isOutOfStock,
                         source: 'zepto'
                     });
                 } catch(e) {}
             });
+            
             return products;
-        })()
-        """)
+        })()""")
     except Exception as e:
         print(f"[Zepto] HTML extraction error: {e}")
         return []
