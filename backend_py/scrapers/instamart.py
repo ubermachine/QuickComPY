@@ -1,6 +1,8 @@
 import urllib.parse
 import asyncio
 import json
+import time
+import zendriver as zd
 
 CITY_COORDINATES = {
   'delhi': { 'lat': 28.6139, 'lng': 77.2090, 'address': 'New Delhi, Delhi, India' },
@@ -14,6 +16,18 @@ CITY_COORDINATES = {
   'ahmedabad': { 'lat': 23.0225, 'lng': 72.5714, 'address': 'Ahmedabad, Gujarat, India' },
 }
 
+async def wait_for_selector(page, selector, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            elem = await page.select(selector)
+            if elem:
+                return elem
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    return None
+
 async def set_location(page, location):
     print(f"[Instamart] Attempting to set location to {location}")
 
@@ -22,34 +36,37 @@ async def set_location(page, location):
 
     try:
         if "swiggy.com/instamart" not in page.url:
-            await page.goto("https://www.swiggy.com/instamart", wait_until="domcontentloaded", timeout=60000)
+            await page.get("https://www.swiggy.com/instamart")
 
         # Inject location via JS
-        script = """
-        (lat, lng, address) => {
-            const locationData = {
+        script = f"""
+        (() => {{
+            const lat = {coords['lat']};
+            const lng = {coords['lng']};
+            const address = "{coords['address']}";
+            const locationData = {{
                 lat: lat,
                 lng: lng,
                 address: address,
                 area: address.split(',')[0],
                 city: address.split(',')[1] ? address.split(',')[1].trim() : '',
                 areaId: '',
-                latlng: `${lat},${lng}`
-            };
-            try { localStorage.setItem('userLocation', JSON.stringify(locationData)); } catch(e) {}
-            try { localStorage.setItem('swiggy_location', JSON.stringify(locationData)); } catch(e) {}
-            try { localStorage.setItem('IM_location', JSON.stringify(locationData)); } catch(e) {}
-            try { sessionStorage.setItem('userLocation', JSON.stringify(locationData)); } catch(e) {}
-        }
+                latlng: `${{lat}},${{lng}}`
+            }};
+            try {{ localStorage.setItem('userLocation', JSON.stringify(locationData)); }} catch(e) {{}}
+            try {{ localStorage.setItem('swiggy_location', JSON.stringify(locationData)); }} catch(e) {{}}
+            try {{ localStorage.setItem('IM_location', JSON.stringify(locationData)); }} catch(e) {{}}
+            try {{ sessionStorage.setItem('userLocation', JSON.stringify(locationData)); }} catch(e) {{}}
+        }})()
         """
-        await page.evaluate(script, [coords['lat'], coords['lng'], coords['address']])
+        await page.evaluate(script)
 
-        await page.context.add_cookies([{
-            'name': 'userLocation',
-            'value': json.dumps({'lat': coords['lat'], 'lng': coords['lng']}),
-            'domain': '.swiggy.com',
-            'path': '/'
-        }])
+        await page.send(zd.cdp.network.set_cookie(
+            name='userLocation',
+            value=json.dumps({'lat': coords['lat'], 'lng': coords['lng']}),
+            domain='.swiggy.com',
+            path='/'
+        ))
 
         await asyncio.sleep(0.5)
         return True
@@ -63,14 +80,14 @@ async def search(page, search_term):
 
     try:
         search_url = f"https://www.swiggy.com/instamart/search?query={encoded}"
-        await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+        await page.get(search_url)
 
         if 'blocked' in page.url or 'captcha' in page.url:
             await asyncio.sleep(3)
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=60000)
+            await page.get(search_url)
 
         try:
-            await page.wait_for_selector('[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]', timeout=15000)
+            await wait_for_selector(page, '[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]', timeout=15)
         except Exception:
             pass
 
@@ -82,26 +99,26 @@ async def search(page, search_term):
 async def extract_from_html(page):
     products = []
     try:
-        cards = await page.query_selector_all('[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]')
+        cards = await page.select_all('[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]')
         for idx, card in enumerate(cards):
             try:
-                name_el = await card.query_selector('._1lbNR')
-                name = await name_el.inner_text() if name_el else "Unknown"
+                name_el = await card.select('._1lbNR')
+                name = name_el.text if name_el and name_el.text else "Unknown"
 
-                price_el = await card.query_selector('._2jn41')
-                price = await price_el.inner_text() if price_el else "N/A"
+                price_el = await card.select('._2jn41')
+                price = price_el.text if price_el and price_el.text else "N/A"
 
-                orig_el = await card.query_selector('._3eAjW._2jn41._1VrXB')
-                orig_price = await orig_el.inner_text() if orig_el else None
+                orig_el = await card.select('._3eAjW._2jn41._1VrXB')
+                orig_price = orig_el.text if orig_el and orig_el.text else None
 
-                qty_el = await card.query_selector('._3wq_F')
-                quantity = await qty_el.inner_text() if qty_el else ""
+                qty_el = await card.select('._3wq_F')
+                quantity = qty_el.text if qty_el and qty_el.text else ""
 
-                img_el = await card.query_selector('img._16I1D, img[alt]')
-                image_url = await img_el.get_attribute("src") if img_el else ""
+                img_el = await card.select('img._16I1D, img[alt]')
+                image_url = img_el.attrs.get("src") if img_el and hasattr(img_el, "attrs") else ""
 
-                discount_el = await card.query_selector('[data-testid="offer-text"]')
-                discount = await discount_el.inner_text() if discount_el else None
+                discount_el = await card.select('[data-testid="offer-text"]')
+                discount = discount_el.text if discount_el and discount_el.text else None
 
                 savings = None
 

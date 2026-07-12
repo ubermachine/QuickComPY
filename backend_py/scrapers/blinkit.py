@@ -1,29 +1,43 @@
 import urllib.parse
 import asyncio
 import json
+import time
+import zendriver as zd
+
+async def wait_for_selector(page, selector, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            elem = await page.select(selector)
+            if elem:
+                return elem
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    return None
 
 async def set_location(page, location):
     print(f"[Blinkit] Attempting to set location to {location}")
     try:
-        await page.goto("https://blinkit.com/", wait_until="domcontentloaded", timeout=30000)
+        await page.get("https://blinkit.com/")
     except Exception as e:
         print(f"[Blinkit] Error navigating: {e}")
 
     try:
         # Wait for location button
-        location_btn = await page.wait_for_selector('div[class*="LocationFacility"]', timeout=5000)
+        location_btn = await wait_for_selector(page, 'div[class*="LocationFacility"]', timeout=5)
         if location_btn:
             await location_btn.click()
             await asyncio.sleep(1)
 
             # Type location
-            input_box = await page.wait_for_selector('input[name="select-locality"]', timeout=5000)
+            input_box = await wait_for_selector(page, 'input[name="select-locality"]', timeout=5)
             if input_box:
-                await input_box.fill(location)
+                await input_box.send_keys(location)
                 await asyncio.sleep(2)
 
                 # Click first suggestion
-                suggestions = await page.query_selector_all('div[class*="LocationSearchList__LocationListContainer"]')
+                suggestions = await page.select_all('div[class*="LocationSearchList__LocationListContainer"]')
                 if suggestions:
                     await suggestions[0].click()
                     await asyncio.sleep(2)
@@ -39,26 +53,25 @@ async def search(page, search_term):
     collected_snippets = []
     resolved = {"done": False}
 
-    async def handle_response(response):
+    async def handle_response(event: zd.cdp.network.ResponseReceived):
         if resolved["done"]: return
-        if "blinkit.com/v1/layout/search" not in response.url: return
+        if "blinkit.com/v1/layout/search" not in event.response.url: return
 
         try:
-            content_type = response.headers.get("content-type", "")
-            if "application/json" not in content_type: return
-
-            json_data = await response.json()
-            if json_data and "response" in json_data and "snippets" in json_data["response"]:
-                snippets = json_data["response"]["snippets"]
-                collected_snippets.extend(snippets)
-                resolved["done"] = True
+            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
+            if body_info:
+                json_data = json.loads(body_info[0])
+                if json_data and "response" in json_data and "snippets" in json_data["response"]:
+                    snippets = json_data["response"]["snippets"]
+                    collected_snippets.extend(snippets)
+                    resolved["done"] = True
         except Exception:
             pass
 
-    page.on("response", handle_response)
+    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
 
     try:
-        await page.goto(f"https://blinkit.com/s/?q={encoded}", wait_until="domcontentloaded", timeout=30000)
+        await page.get(f"https://blinkit.com/s/?q={encoded}")
     except Exception:
         pass
 
@@ -67,7 +80,7 @@ async def search(page, search_term):
         if resolved["done"]: break
         await asyncio.sleep(0.1)
 
-    page.remove_listener("response", handle_response)
+    page.remove_handlers(zd.cdp.network.ResponseReceived)
 
     if not collected_snippets:
         return []

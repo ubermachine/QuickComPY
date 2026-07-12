@@ -1,25 +1,38 @@
 import urllib.parse
 import asyncio
+import time
+
+async def wait_for_selector(page, selector, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            elem = await page.select(selector)
+            if elem:
+                return elem
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    return None
 
 async def set_location(page, location):
     print(f"[JioMart] Attempting to set location to {location}")
     try:
-        await page.goto("https://www.jiomart.com/", wait_until="domcontentloaded", timeout=30000)
+        await page.get("https://www.jiomart.com/")
     except Exception as e:
         print(f"[JioMart] Error navigating: {e}")
 
     try:
         # JioMart location logic
-        location_btn = await page.wait_for_selector('button[id="btn_pin_code"]', timeout=5000)
+        location_btn = await wait_for_selector(page, 'button[id="btn_pin_code"]', timeout=5)
         if location_btn:
             await location_btn.click()
             await asyncio.sleep(1)
 
-            input_box = await page.wait_for_selector('input[id="rel_pincode"]', timeout=5000)
+            input_box = await wait_for_selector(page, 'input[id="rel_pincode"]', timeout=5)
             if input_box:
-                await input_box.fill(location)
+                await input_box.send_keys(location)
 
-                apply_btn = await page.wait_for_selector('button[id="btn_pincode_apply"]', timeout=5000)
+                apply_btn = await wait_for_selector(page, 'button[id="btn_pincode_apply"]', timeout=5)
                 if apply_btn:
                     await apply_btn.click()
                     await asyncio.sleep(2)
@@ -33,10 +46,10 @@ async def search(page, search_term):
     print(f"[JioMart] Searching for: {search_term}")
 
     try:
-        await page.goto(f"https://www.jiomart.com/products?q={encoded}", wait_until="domcontentloaded", timeout=30000)
+        await page.get(f"https://www.jiomart.com/products?q={encoded}")
 
         try:
-            await page.wait_for_selector('.productCard__cardWrapper', timeout=15000)
+            await wait_for_selector(page, '.productCard__cardWrapper', timeout=15)
         except Exception:
             pass
 
@@ -48,29 +61,29 @@ async def search(page, search_term):
 async def extract_from_html(page):
     products = []
     try:
-        cards = await page.query_selector_all('.productCard__cardWrapper')
+        cards = await page.select_all('.productCard__cardWrapper')
         for idx, card in enumerate(cards):
             try:
-                name_el = await card.query_selector('.productCard__productTitle')
-                name = await name_el.inner_text() if name_el else "Unknown"
+                name_el = await card.select('.productCard__productTitle')
+                name = name_el.text if name_el and name_el.text else "Unknown"
 
-                price_el = await card.query_selector('.PriceContainer__currentPrice')
-                price = await price_el.inner_text() if price_el else "N/A"
+                price_el = await card.select('.PriceContainer__currentPrice')
+                price = price_el.text if price_el and price_el.text else "N/A"
 
-                orig_el = await card.query_selector('.PriceContainer__originalPrice')
-                orig_price = await orig_el.inner_text() if orig_el else None
+                orig_el = await card.select('.PriceContainer__originalPrice')
+                orig_price = orig_el.text if orig_el and orig_el.text else None
 
-                qty_el = await card.query_selector('.productCard__sizeSpan')
+                qty_el = await card.select('.productCard__sizeSpan')
                 if not qty_el:
-                    qty_el = await card.query_selector('.productCard__quantitySelector')
-                quantity = await qty_el.inner_text() if qty_el else ""
+                    qty_el = await card.select('.productCard__quantitySelector')
+                quantity = qty_el.text if qty_el and qty_el.text else ""
 
-                img_el = await card.query_selector('.productCard__productImage')
+                img_el = await card.select('.productCard__productImage')
                 image_url = ""
-                if img_el:
-                    image_url = await img_el.get_attribute("src")
+                if img_el and hasattr(img_el, "attrs"):
+                    image_url = img_el.attrs.get("src")
                     if not image_url:
-                        image_url = await img_el.get_attribute("data-src")
+                        image_url = img_el.attrs.get("data-src")
 
                 savings = None
                 discount = None
