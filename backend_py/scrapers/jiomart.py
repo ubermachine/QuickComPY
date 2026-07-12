@@ -62,9 +62,20 @@ async def search(page, search_term):
             await page.get("https://www.jiomart.com/")
             await asyncio.sleep(1.5)
         await page.get(f"https://www.jiomart.com/products?q={encoded}")
-        await asyncio.sleep(4)
+        await asyncio.sleep(6)
 
-        return await extract_from_html(page)
+        # Wait for product cards to appear (poll up to 15s)
+        await wait_for_selector(page, ".productCard__productTitle", timeout=15)
+
+        products = await extract_from_html(page)
+
+        # Retry once if extraction returned 0 products
+        if not products:
+            print("[JioMart] No products found on first attempt, retrying after 3s...")
+            await asyncio.sleep(3)
+            products = await extract_from_html(page)
+
+        return products
     except Exception as e:
         print(f"[JioMart] Search error: {e}")
         return []

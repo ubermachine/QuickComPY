@@ -3,6 +3,9 @@ import asyncio
 import time
 import zendriver as zd
 
+# Module-level pincode store set by set_location(), read by search()
+_pincode = None
+
 async def wait_for_selector(page, selector, timeout=10):
     start = time.time()
     while time.time() - start < timeout:
@@ -17,8 +20,10 @@ async def wait_for_selector(page, selector, timeout=10):
 
 async def set_location(page, location):
     """Set location via page navigation and selection"""
+    global _pincode
     print(f"[Zepto] Attempting to set location to {location}")
     pincode = str(location).strip()[:6] if location else '110001'
+    _pincode = pincode
     
     try:
         await page.get("https://www.zepto.com/")
@@ -63,11 +68,19 @@ async def set_location(page, location):
     return False
 
 async def search(page, search_term):
+    global _pincode
     encoded = urllib.parse.quote(search_term)
     print(f"[Zepto] Searching for: {search_term}")
+    pincode = _pincode or '110001'
     try:
+        # Establish domain, set location cookie, then navigate to search
+        await page.get("https://www.zepto.com/")
+        await asyncio.sleep(1)
+        await page.send(zd.cdp.network.set_cookie(
+            name='location', value=pincode, domain='.zepto.com', path='/', secure=True
+        ))
         await page.get(f"https://www.zepto.com/search?query={encoded}")
-        await asyncio.sleep(3)
+        await asyncio.sleep(5)
         return await extract_from_html(page)
     except Exception as e:
         print(f"[Zepto] Search error: {e}")
@@ -81,7 +94,7 @@ async def extract_from_html(page):
             
             // Find product cards - multiple selectors for resilience
             const cards = document.querySelectorAll(
-                'a[href*="/pn/"], a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"]'
+                'a[href*="/pn/"], a.B4vNQ, a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"]'
             );
             
             for (const card of cards) {
@@ -89,15 +102,16 @@ async def extract_from_html(page):
                     const text = card.textContent.replace(/\\s+/g, ' ').trim();
                     if (!text || text.length < 10 || !text.includes('₹')) continue;
                     
-                    // Name: from data-slot-id or first meaningful text
+                    // Name: from data-slot-id or image alt (skip if neither)
                     let name = '';
                     const nameEl = card.querySelector('[data-slot-id="ProductName"]');
                     if (nameEl) {
                         name = nameEl.textContent.trim();
                     } else {
-                        // Fallback: find text before ₹
-                        const parts = text.split('₹');
-                        name = parts[0].trim();
+                        // Fallback: try image alt attribute
+                        const img = card.querySelector('img');
+                        name = img ? (img.alt || '').trim() : '';
+                        if (!name) continue;
                     }
                     if (!name || name.length < 2) continue;
                     
@@ -108,8 +122,10 @@ async def extract_from_html(page):
                         quantity = packEl.textContent.trim();
                     }
                     
-                    // Prices using regex
-                    const prices = text.match(/₹[0-9,]+/g) || [];
+                    // Prices: try DOM selector first, fall back to regex
+                    let priceEl = card.querySelector('div[data-slot-id="EdlpPrice"] span');
+                    let priceTxt = priceEl ? priceEl.textContent.trim() : '';
+                    const prices = priceTxt ? [priceTxt] : (text.match(/₹[0-9,]+/g) || []);
                     let price = prices.length > 0 ? '₹' + prices[0].replace(/[^0-9.]/g, '') : 'N/A';
                     let origPrice = null;
                     if (prices.length >= 2) {
