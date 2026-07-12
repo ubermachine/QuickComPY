@@ -3,7 +3,7 @@ import json
 import uuid
 import sys
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from camoufox.async_api import AsyncCamoufox
+import zendriver as zd
 import traceback
 
 from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto, instamart
@@ -24,10 +24,9 @@ global_browser = None
 
 async def init_browser():
     global global_browser
-    print("Starting AsyncCamoufox global browser...")
-    # Camoufox automatically handles stealth, headers, and fingerprinting
-    global_browser = await AsyncCamoufox(headless=True, ).start()
-    print("Camoufox started.")
+    print("Starting Zendriver global browser...")
+    global_browser = await zd.start(config=zd.Config(sandbox=False, headless=True))
+    print("Zendriver started.")
 
 @app.on_event("startup")
 async def startup_event():
@@ -54,7 +53,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 print(f"Setting location {location} for {client_id}")
 
                 async def set_loc_svc(svc):
-                    page = await global_browser.new_page()
+                    page = await global_browser.get('about:blank', new_tab=True)
                     try:
                         success = await SCRAPERS[svc].set_location(page, location)
                         return svc, success
@@ -86,7 +85,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 })
 
                 async def search_svc(svc):
-                    page = await global_browser.new_page()
+                    page = await global_browser.get('about:blank', new_tab=True)
                     try:
                         await websocket.send_json({
                             "action": "statusUpdate",

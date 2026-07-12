@@ -2,26 +2,39 @@ import urllib.parse
 import asyncio
 import json
 import re
+import time
+
+async def wait_for_selector(page, selector, timeout=10):
+    start = time.time()
+    while time.time() - start < timeout:
+        try:
+            elem = await page.select(selector)
+            if elem:
+                return elem
+        except Exception:
+            pass
+        await asyncio.sleep(0.5)
+    return None
 
 async def set_location(page, location):
     print(f"[Bigbasket] Attempting to set location to {location}")
     try:
-        await page.goto("https://www.bigbasket.com/", wait_until="domcontentloaded", timeout=30000)
+        await page.get("https://www.bigbasket.com/")
     except Exception as e:
         print(f"[Bigbasket] Error navigating: {e}")
 
     try:
-        location_header = await page.wait_for_selector('button:has-text("Location"), span:has-text("Location")', timeout=5000)
+        location_header = await page.find("Location", best_match=True)
         if location_header:
             await location_header.click()
             await asyncio.sleep(1)
 
-            input_box = await page.wait_for_selector('input[placeholder*="Search for your city"]', timeout=5000)
+            input_box = await wait_for_selector(page, 'input[placeholder*="Search for your city"]', timeout=5)
             if input_box:
-                await input_box.fill(location)
+                await input_box.send_keys(location)
                 await asyncio.sleep(2)
 
-                suggestions = await page.query_selector_all('ul[class*="overflow-y-auto"] li')
+                suggestions = await page.select_all('ul[class*="overflow-y-auto"] li')
                 if suggestions:
                     await suggestions[0].click()
                     await asyncio.sleep(2)
@@ -35,11 +48,11 @@ async def search(page, search_term):
     print(f"[Bigbasket] Searching for: {search_term}")
 
     try:
-        await page.goto(f"https://www.bigbasket.com/ps/?q={encoded}", wait_until="domcontentloaded", timeout=30000)
+        await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
         await asyncio.sleep(2)
 
         # We try to extract from __PRELOADED_STATE__ directly
-        html = await page.content()
+        html = await page.get_content()
 
         match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});', html)
         if match:
@@ -115,23 +128,23 @@ def extract_products_from_state(state):
 async def extract_from_html(page):
     products = []
     try:
-        cards = await page.query_selector_all('div[class*="SKUDeck___StyledDiv"]')
+        cards = await page.select_all('div[class*="SKUDeck___StyledDiv"]')
         for card in cards:
             try:
-                name_el = await card.query_selector('h3[class*="block m-0"]')
-                name = await name_el.inner_text() if name_el else "Unknown"
+                name_el = await card.select('h3[class*="block m-0"]')
+                name = name_el.text if name_el and name_el.text else "Unknown"
 
-                price_el = await card.query_selector('span[class*="Pricing___StyledLabel"]')
-                price = await price_el.inner_text() if price_el else "N/A"
+                price_el = await card.select('span[class*="Pricing___StyledLabel"]')
+                price = price_el.text if price_el and price_el.text else "N/A"
 
-                orig_el = await card.query_selector('span[class*="Pricing___StyledLabel2"]')
-                orig_price = await orig_el.inner_text() if orig_el else None
+                orig_el = await card.select('span[class*="Pricing___StyledLabel2"]')
+                orig_price = orig_el.text if orig_el and orig_el.text else None
 
-                qty_el = await card.query_selector('span[class*="PackChanger___StyledLabel"]')
-                quantity = await qty_el.inner_text() if qty_el else ""
+                qty_el = await card.select('span[class*="PackChanger___StyledLabel"]')
+                quantity = qty_el.text if qty_el and qty_el.text else ""
 
-                img_el = await card.query_selector('img')
-                image_url = await img_el.get_attribute("src") if img_el else ""
+                img_el = await card.select('img')
+                image_url = img_el.attrs.get("src") if img_el and hasattr(img_el, "attrs") else ""
 
                 products.append({
                     "id": name,
