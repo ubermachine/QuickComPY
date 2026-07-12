@@ -79,74 +79,123 @@ async def search(page, search_term):
     print(f"[Instamart] Searching for: {search_term}")
 
     try:
+        if "swiggy.com/instamart" not in page.url:
+            await page.get("https://www.swiggy.com/instamart")
+            await asyncio.sleep(2)
+
         search_url = f"https://www.swiggy.com/instamart/search?query={encoded}"
         await page.get(search_url)
-
-        if 'blocked' in page.url or 'captcha' in page.url:
-            await asyncio.sleep(3)
-            await page.get(search_url)
-
-        try:
-            await wait_for_selector(page, '[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]', timeout=15)
-        except Exception:
-            pass
-
+        
+        html = await page.get_content()
+        if "challenge-container" in html or "AwsWafIntegration" in html or "Something went wrong" in html or "Try Again" in html:
+            print("[Instamart] WAF challenge detected, waiting for resolution...")
+            await page.evaluate("""
+                const btn = Array.from(document.querySelectorAll('button')).find(b => b.innerText && b.innerText.includes('Try Again'));
+                if (btn) btn.click();
+            """)
+            await asyncio.sleep(4)
+            await page.reload()
+            await asyncio.sleep(4)
+            
         return await extract_from_html(page)
     except Exception as e:
         print(f"[Instamart] Search error: {e}")
         return []
 
 async def extract_from_html(page):
-    products = []
     try:
-        cards = await page.select_all('[data-testid="item-collection-card-full"], [data-testid="item-collection-card"]')
-        for idx, card in enumerate(cards):
-            try:
-                name_el = await card.select('._1lbNR')
-                name = name_el.text if name_el and name_el.text else "Unknown"
-
-                price_el = await card.select('._2jn41')
-                price = price_el.text if price_el and price_el.text else "N/A"
-
-                orig_el = await card.select('._3eAjW._2jn41._1VrXB')
-                orig_price = orig_el.text if orig_el and orig_el.text else None
-
-                qty_el = await card.select('._3wq_F')
-                quantity = qty_el.text if qty_el and qty_el.text else ""
-
-                img_el = await card.select('img._16I1D, img[alt]')
-                image_url = img_el.attrs.get("src") if img_el and hasattr(img_el, "attrs") else ""
-
-                discount_el = await card.select('[data-testid="offer-text"]')
-                discount = discount_el.text if discount_el and discount_el.text else None
-
-                savings = None
-
-                if price and orig_price:
-                    sp_str = ''.join(c for c in price if c.isdigit() or c == '.')
-                    mrp_str = ''.join(c for c in orig_price if c.isdigit() or c == '.')
-                    if sp_str and mrp_str:
-                        sp_val = float(sp_str)
-                        mrp_val = float(mrp_str)
-                        if mrp_val > sp_val:
-                            savings = f"₹{(mrp_val - sp_val):.2f}"
-
-                products.append({
-                    "id": f"im_{idx}",
-                    "name": name,
-                    "price": price,
-                    "originalPrice": orig_price,
-                    "savings": savings,
-                    "quantity": quantity,
-                    "deliveryTime": "15min",
-                    "discount": discount,
-                    "imageUrl": image_url,
-                    "available": True,
-                    "source": "instamart"
-                })
-            except Exception:
-                pass
+        return await page.evaluate(r"""
+        (() => {
+            const products = [];
+            const titles = document.querySelectorAll('._1lbNR, [class*="productTitle"], h3');
+            titles.forEach((titleEl, idx) => {
+                try {
+                    let card = titleEl.parentElement;
+                    while(card && card !== document.body && !card.querySelector('img')) {
+                        card = card.parentElement;
+                    }
+                    if (!card) card = titleEl.closest('div');
+                    
+                    const name = titleEl.textContent.trim();
+                    if (!name || name === 'Unknown') return;
+                    
+                    // Use textContent or innerText to extract price and qty
+                    const textLines = (card.innerText || '').split('\\n').map(l => l.trim()).filter(l => l);
+                    
+                    let price = 'N/A';
+                    let origPrice = null;
+                    let quantity = '1 item';
+                    let discount = null;
+                    
+                    // Look for price line containing ₹
+                    for (let i = 0; i < textLines.length; i++) {
+                        const line = textLines[i];
+                        if (line.includes('₹')) {
+                            // Extract numbers
+                            const parts = line.split('₹');
+                            if (parts.length > 1) {
+                                // Sometimes orig price and current price are on the same line, or separate lines.
+                                const valStr = parts[1].replace(/[^0-9.]/g, '');
+                                if (valStr) price = '₹' + valStr;
+                            }
+                            if (parts.length > 2) {
+                                const valStr2 = parts[2].replace(/[^0-9.]/g, '');
+                                if (valStr2) {
+                                    origPrice = price; // The first was MRP
+                                    price = '₹' + valStr2; // The second is selling price
+                                }
+                            }
+                            break;
+                        }
+                    }
+                    
+                    // Quantity often ends with g, kg, ml, L, pcs
+                    for (let i = 0; i < textLines.length; i++) {
+                        const line = textLines[i].toLowerCase();
+                        if (line.match(/^[0-9.]+\s*(g|kg|ml|l|pc|pcs|pack)$/) || line.match(/^[0-9]+\s*x\s*[0-9]+.*$/)) {
+                            quantity = textLines[i];
+                            break;
+                        }
+                    }
+                    
+                    // Attempt fallback if price still N/A
+                    if (price === 'N/A') {
+                        const priceEl = card.querySelector('[class*="price"], ._2jn41');
+                        if (priceEl && priceEl.textContent.includes('₹')) {
+                            price = '₹' + priceEl.textContent.replace(/[^0-9.]/g, '').trim();
+                        }
+                    }
+                    
+                    const imgEl = card.querySelector('img._16I1D, img[alt], img');
+                    const imageUrl = imgEl ? imgEl.src : '';
+                    
+                    let savings = null;
+                    if (price !== 'N/A' && origPrice) {
+                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
+                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
+                        if (mrpVal > spVal) {
+                            savings = '₹' + (mrpVal - spVal).toFixed(2);
+                        }
+                    }
+                    
+                    products.push({
+                        id: 'im_' + idx,
+                        name,
+                        price,
+                        originalPrice: origPrice,
+                        savings,
+                        quantity,
+                        deliveryTime: "15 mins",
+                        discount,
+                        imageUrl,
+                        available: true,
+                        source: 'instamart'
+                    });
+                } catch(e) {}
+            });
+            return products;
+        })()
+        """)
     except Exception as e:
-        print(f"[Instamart] Extraction error: {e}")
-
-    return products
+        print(f"[Instamart] HTML extraction error: {e}")
+        return []

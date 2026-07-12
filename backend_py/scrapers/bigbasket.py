@@ -24,19 +24,54 @@ async def set_location(page, location):
         print(f"[Bigbasket] Error navigating: {e}")
 
     try:
-        location_header = await page.find("Location", best_match=True)
-        if location_header:
-            await location_header.click()
-            await asyncio.sleep(1)
+        # Find location button by iterating over buttons
+        buttons = await page.select_all("button")
+        location_btn = None
+        for btn in buttons:
+            try:
+                txt = btn.text
+                if txt and any(x in txt for x in ["Select Location", "Deliver to", "Delivery in", "Get it in"]):
+                    location_btn = btn
+                    break
+            except Exception:
+                pass
+        
+        if location_btn:
+            await location_btn.click()
+            await asyncio.sleep(1.5)
 
-            input_box = await wait_for_selector(page, 'input[placeholder*="Search for your city"]', timeout=5)
+            # Find input box by looking at placeholders
+            inputs = await page.select_all("input")
+            input_box = None
+            for inp in inputs:
+                try:
+                    ph = inp.attrs.get("placeholder", "")
+                    if any(x in ph for x in ["Search for area", "Search for your city", "Search for street", "Search for address"]):
+                        input_box = inp
+                        break
+                except Exception:
+                    pass
+
             if input_box:
                 await input_box.send_keys(location)
-                await asyncio.sleep(2)
+                await asyncio.sleep(2.5)
 
-                suggestions = await page.select_all('ul[class*="overflow-y-auto"] li')
-                if suggestions:
-                    await suggestions[0].click()
+                suggestions = await page.select_all('ul li, li')
+                target_suggestion = None
+                for sug in suggestions:
+                    try:
+                        sug_txt = sug.text
+                        if sug_txt and any(c.isdigit() for c in sug_txt):
+                            target_suggestion = sug
+                            break
+                    except Exception:
+                        pass
+                
+                if not target_suggestion and suggestions:
+                    target_suggestion = suggestions[0]
+
+                if target_suggestion:
+                    await target_suggestion.click()
                     await asyncio.sleep(2)
                     return True
     except Exception as e:
@@ -49,15 +84,20 @@ async def search(page, search_term):
 
     try:
         await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
-        await asyncio.sleep(2)
+        await asyncio.sleep(3)
 
         # We try to extract from __PRELOADED_STATE__ directly
         html = await page.get_content()
 
         match = re.search(r'window\.__PRELOADED_STATE__\s*=\s*(\{.*?\});', html)
         if match:
-            state = json.loads(match.group(1))
-            return extract_products_from_state(state)
+            try:
+                state = json.loads(match.group(1))
+                prods = extract_products_from_state(state)
+                if prods:
+                    return prods
+            except Exception:
+                pass
 
         # Fallback to direct HTML extraction if state is missing
         return await extract_from_html(page)
@@ -126,41 +166,57 @@ def extract_products_from_state(state):
     return products
 
 async def extract_from_html(page):
-    products = []
     try:
-        cards = await page.select_all('div[class*="SKUDeck___StyledDiv"]')
-        for card in cards:
-            try:
-                name_el = await card.select('h3[class*="block m-0"]')
-                name = name_el.text if name_el and name_el.text else "Unknown"
-
-                price_el = await card.select('span[class*="Pricing___StyledLabel"]')
-                price = price_el.text if price_el and price_el.text else "N/A"
-
-                orig_el = await card.select('span[class*="Pricing___StyledLabel2"]')
-                orig_price = orig_el.text if orig_el and orig_el.text else None
-
-                qty_el = await card.select('span[class*="PackChanger___StyledLabel"]')
-                quantity = qty_el.text if qty_el and qty_el.text else ""
-
-                img_el = await card.select('img')
-                image_url = img_el.attrs.get("src") if img_el and hasattr(img_el, "attrs") else ""
-
-                products.append({
-                    "id": name,
-                    "name": name,
-                    "price": price,
-                    "originalPrice": orig_price,
-                    "savings": None,
-                    "quantity": quantity,
-                    "deliveryTime": "Standard Delivery",
-                    "discount": None,
-                    "imageUrl": image_url,
-                    "available": True,
-                    "source": "bigbasket"
-                })
-            except Exception:
-                pass
-    except Exception:
-        pass
-    return products
+        return await page.evaluate("""
+        (() => {
+            const products = [];
+            const cards = document.querySelectorAll('div[class*="SKUDeck___StyledDiv"], [class*="skudeck"], div[class*="SkuDeck___StyledDiv"]');
+            cards.forEach((card, idx) => {
+                try {
+                    const nameEl = card.querySelector('h3[class*="block m-0"], h3');
+                    const name = nameEl ? nameEl.textContent.trim() : 'Unknown';
+                    
+                    const priceEl = card.querySelector('span[class*="Pricing___StyledLabel"], [class*="pricing"], span[class*="Pricing___StyledLabel2"]');
+                    const price = priceEl ? priceEl.textContent.trim() : 'N/A';
+                    
+                    const origEl = card.querySelector('span[class*="Pricing___StyledLabel2"], [class*="mrp"], span[class*="Pricing___StyledLabel3"]');
+                    const origPrice = (origEl && origEl !== priceEl) ? origEl.textContent.trim() : null;
+                    
+                    const qtyEl = card.querySelector('span[class*="PackChanger___StyledLabel"], [class*="pack-changer"]');
+                    const quantity = qtyEl ? qtyEl.textContent.trim() : '';
+                    
+                    const imgEl = card.querySelector('img');
+                    const imageUrl = imgEl ? imgEl.src : '';
+                    
+                    let savings = null;
+                    let discount = null;
+                    if (price && origPrice) {
+                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
+                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
+                        if (mrpVal > spVal) {
+                            savings = '₹' + (mrpVal - spVal).toFixed(2);
+                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
+                        }
+                    }
+                    
+                    products.push({
+                        id: 'bb_' + idx,
+                        name,
+                        price,
+                        originalPrice: origPrice,
+                        savings,
+                        quantity,
+                        deliveryTime: "Standard Delivery",
+                        discount,
+                        imageUrl,
+                        available: true,
+                        source: 'bigbasket'
+                    });
+                } catch(e) {}
+            });
+            return products;
+        })()
+        """)
+    except Exception as e:
+        print(f"[Bigbasket] HTML extraction error: {e}")
+        return []
