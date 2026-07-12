@@ -5,9 +5,8 @@ import zendriver as zd
 from curl_cffi import requests
 from backend_py.awswaf.aws import AwsWaf
 
-async def solve_and_browse():
-    # Step 1: Solve WAF via awswaf (curl_cffi)
-    print('[1] Getting WAF challenge...')
+async def main():
+    # Solve WAF
     session = requests.Session(impersonate="chrome")
     session.headers.update({
         'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -16,52 +15,40 @@ async def solve_and_browse():
     })
     resp = session.get('https://www.swiggy.com/instamart', timeout=30)
     goku, host = AwsWaf.extract(resp.text)
-    
-    print(f'[2] Solving...')
     token = AwsWaf(goku, host, 'www.swiggy.com')()
-    print(f'[3] Token: {token[:60]}...')
+    print(f'Token: {token[:60]}...')
 
-    # Step 2: Open browser, inject token, navigate
-    print('[4] Opening Zendriver browser...')
+    # Launch Zendriver with token cookie pre-set
     browser = await zd.start(config=zd.Config(sandbox=False, headless=True))
     page = await browser.get('about:blank', new_tab=True)
     
-    # Inject WAF token via CDP cookie
+    # Inject cookie via CDP BEFORE navigating
     await page.send(zd.cdp.network.set_cookie(
-        name='aws-waf-token',
-        value=token,
-        domain='.swiggy.com',
-        path='/'
+        name='aws-waf-token', value=token,
+        domain='.swiggy.com', path='/'
     ))
-    print('[5] Token cookie injected')
     
-    # Navigate to search page
+    # Navigate and check
     await page.get('https://www.swiggy.com/instamart/search?query=eggs')
-    await asyncio.sleep(5)
+    await asyncio.sleep(6)
     
-    url = page.url
-    content = await page.content()
-    print(f'[6] URL: {url}')
-    print(f'[7] Content: {len(content)} chars')
-    
+    content = await page.get_content()
     waf = 'Something went wrong' in content or 'Try Again' in content
-    print(f'[8] WAF blocked: {waf}')
-    
-    if not waf and len(content) > 30000:
-        print('[9] SUCCESS! Page loaded with products!')
-        with open('im_waf_solved.html', 'w', encoding='utf-8') as f:
-            f.write(content[:200000])
-        # Try to extract products
-        prods = await page.evaluate("""() => {
-            const items = document.querySelectorAll('[class*="product"],[class*="Product"],[data-testid],a[href*="/product/"]');
-            return [...items].slice(0,10).map(el => ({
-                tag: el.tagName,
-                text: (el.textContent||'').trim().substring(0,200),
-                cls: (el.className||'').substring(0,50)
-            })).filter(x => x.text.length > 5 && x.text.includes('₹'));
-        }""")
-        print(f'Products: {json.dumps(prods, indent=2, ensure_ascii=False)[:2000]}')
-    
+    print(f'Content: {len(content)} chars, WAF: {waf}')
+
+    if not waf:
+        print('*** WAF BYPASSED! ***')
+        if len(content) > 50000:
+            prods = await page.evaluate("""() => {
+                const r = []; document.querySelectorAll('a, div').forEach(el => {
+                    const t = (el.textContent||'').trim();
+                    if (t.includes('₹') && t.length < 300) r.push(t.substring(0,200));
+                }); return [...new Set(r)].slice(0,10);
+            }""")
+            print(f'Products found: {json.dumps(prods, ensure_ascii=False)}')
+    else:
+        print('Token not accepted. Falling back.')
+
     await browser.stop()
 
-asyncio.run(solve_and_browse())
+asyncio.run(main())
