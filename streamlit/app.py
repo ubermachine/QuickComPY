@@ -1,3 +1,4 @@
+import html
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -290,19 +291,28 @@ if has_active_searches:
             if svc_data['status'] == 'success':
                 st.caption(f"Found {len(svc_data['products'])} items")
                 for product in svc_data['products']:
-                    img_tag = f"<img src='{product.get('imageUrl')}' class='product-img'/>" if product.get('imageUrl') else ""
-                    orig_price = f"<span class='original-price'>{product['originalPrice']}</span>" if product.get('originalPrice') else ""
-                    discount = f"<span class='discount-badge'>{product['discount']}</span>" if product.get('discount') else ""
-                    
-                    discount_div = f'<div style="margin-top:4px;">{discount}</div>' if discount else ''
+                    # HTML-escape all product data to prevent broken/malformed output
+                    safe_name = html.escape(str(product.get('name', 'Unknown')))
+                    safe_price = html.escape(str(product.get('price', 'N/A')))
+                    safe_qty = html.escape(str(product.get('quantity', '1 item')))
+                    safe_delivery = html.escape(str(product.get('deliveryTime', 'N/A')))
+                    safe_orig = html.escape(str(product.get('originalPrice', '')))
+                    safe_discount = html.escape(str(product.get('discount', '')))
+                    safe_img = html.escape(str(product.get('imageUrl') or ''), quote=True)
+
+                    img_tag = f'<img src="{safe_img}" class="product-img"/>' if safe_img else ''
+                    orig_price_tag = f'<span class="original-price">{safe_orig}</span>' if safe_orig else ''
+                    discount_tag = f'<span class="discount-badge">{safe_discount}</span>' if safe_discount else ''
+                    discount_div = f'<div style="margin-top:4px;">{discount_tag}</div>' if discount_tag else ''
+
                     card_html = f"""
                     <div class="glass-card">
                         {img_tag}
-                        <div class="product-title">{product['name']}</div>
-                        <div style="color: #cbd5e1; font-size: 0.8em; margin-bottom: 8px;">{product.get('quantity', '1 item')} | Time: {product.get('deliveryTime', 'N/A')}</div>
+                        <div class="product-title">{safe_name}</div>
+                        <div style="color: #cbd5e1; font-size: 0.8em; margin-bottom: 8px;">{safe_qty} | Time: {safe_delivery}</div>
                         <div class="price-row">
-                            <span class="current-price">{product['price']}</span>
-                            {orig_price}
+                            <span class="current-price">{safe_price}</span>
+                            {orig_price_tag}
                         </div>
                         {discount_div}
                     </div>
