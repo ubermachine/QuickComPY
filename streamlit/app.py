@@ -24,11 +24,11 @@ st.markdown("""
     .stTextInput input { background: rgba(255,255,255,0.12); color: #0f172a; border: 1px solid rgba(255,255,255,0.25); }
     .stTextInput input::placeholder { color: #94a3b8; }
     .stTextInput label { color: #f8fafc !important; }
-    .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px; transition: transform 0.2s, box-shadow 0.2s; height: 100%; display: flex; flex-direction: column; }
+    .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; margin-bottom: 16px; transition: transform 0.2s, box-shadow 0.2s; min-height: 240px; display: flex; flex-direction: column; }
     .glass-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(255, 255, 255, 0.2); }
     .product-img { width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.9); padding: 8px; }
     .product-title { font-weight: 600; font-size: 1.1em; line-height: 1.3; margin-bottom: 8px; color: #f8fafc; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-    .price-row { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+    .price-row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
     .current-price { font-size: 1.25em; font-weight: 800; color: #10b981; }
     .original-price { text-decoration: line-through; color: #64748b; font-size: 0.9em; }
     .discount-badge { background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: 600; }
