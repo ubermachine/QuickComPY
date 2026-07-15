@@ -1,7 +1,6 @@
 import urllib.parse
 import asyncio
 import json
-import time
 import zendriver as zd
 
 LOCATION_COORDS = {
