@@ -100,6 +100,13 @@ async def extract_from_html(page):
                     beforePrice = beforePrice.replace(/\\(?[\\d.]+[kK]?\\)?\\s*$/, '').trim();
                     
                     var name = beforePrice.replace(/^\\d+\\s*/, '').trim();
+                    // Un-squash words: insert space before uppercase following lowercase (camelCase)
+                    name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
+                    // Insert space between letter and adjacent digit
+                    name = name.replace(/([a-zA-Z])(\\d)/g, '$1 $2');
+                    name = name.replace(/(\\d)([a-zA-Z])/g, '$1 $2');
+                    // Collapse multiple spaces and trim again
+                    name = name.replace(/\\s+/g, ' ').trim();
                     if (!name || name.length < 3) continue;
                     
                     var priceMatch = text.match(/\\u20B9\\s*[\\d,]+(?:\\.\\d{1,2})?/);

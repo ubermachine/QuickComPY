@@ -292,12 +292,12 @@ if has_active_searches:
                 st.caption(f"Found {len(svc_data['products'])} items")
                 for product in svc_data['products']:
                     # HTML-escape all product data to prevent broken/malformed output
-                    safe_name = html.escape(str(product.get('name', 'Unknown')))
-                    safe_price = html.escape(str(product.get('price', 'N/A')))
-                    safe_qty = html.escape(str(product.get('quantity', '1 item')))
-                    safe_delivery = html.escape(str(product.get('deliveryTime', 'N/A')))
-                    safe_orig = html.escape(str(product.get('originalPrice', '')))
-                    safe_discount = html.escape(str(product.get('discount', '')))
+                    safe_name = html.escape(str(product.get('name') or 'Unknown'))
+                    safe_price = html.escape(str(product.get('price') or 'N/A'))
+                    safe_qty = html.escape(str(product.get('quantity') or '1 item'))
+                    safe_delivery = html.escape(str(product.get('deliveryTime') or 'N/A'))
+                    safe_orig = html.escape(str(product.get('originalPrice') or ''))
+                    safe_discount = html.escape(str(product.get('discount') or ''))
                     safe_img = html.escape(str(product.get('imageUrl') or ''), quote=True)
 
                     img_tag = f'<img src="{safe_img}" class="product-img"/>' if safe_img else ''
