@@ -137,8 +137,10 @@ async def search(page, search_term):
         await page.get("https://www.zepto.com/")
         await asyncio.sleep(1.5)
         
-        # Inject location session cookies
-        await inject_location_cookies(page, pincode, lat, lon)
+        # Set location cookies WITHOUT deleting serviceability (already set by set_location)
+        await page.send(zd.cdp.network.set_cookie(name='latitude', value=lat, domain='.zepto.com', path='/', secure=True))
+        await page.send(zd.cdp.network.set_cookie(name='longitude', value=lon, domain='.zepto.com', path='/', secure=True))
+        await page.send(zd.cdp.network.set_cookie(name='location', value=pincode, domain='.zepto.com', path='/', secure=True))
         
         # Navigate to search URL
         await page.get(f"https://www.zepto.com/search?query={encoded}")
@@ -191,13 +193,13 @@ async def extract_from_html(page):
             
             // Find product cards - multiple selectors for resilience
             const cards = document.querySelectorAll(
-                'a[href*="/pn/"], a.B4vNQ, a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"]'
+                'a[href*="/pn/"], a.B4vNQ, a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"], [class*="search"], a[href*="/product/"], div[class*="item"] a, li a'
             );
             
             for (const card of cards) {
                 try {
                     const text = card.textContent.replace(/\\s+/g, ' ').trim();
-                    if (!text || text.length < 10 || !text.includes('₹')) continue;
+                    if (!text || text.length < 10 || (!text.includes('₹') && !text.match(/\\d+/))) continue;
                     
                     // Name: from data-slot-id or image alt (skip if neither)
                     let name = '';
@@ -222,7 +224,7 @@ async def extract_from_html(page):
                     // Prices: try DOM selector first, fall back to regex
                     let priceEl = card.querySelector('div[data-slot-id="EdlpPrice"] span');
                     let priceTxt = priceEl ? priceEl.textContent.trim() : '';
-                    const prices = priceTxt ? [priceTxt] : (text.match(/₹[0-9,]+/g) || []);
+                    const prices = priceTxt ? [priceTxt] : (text.match(/₹[0-9,.]+/g) || []);
                     let price = prices.length > 0 ? '₹' + prices[0].replace(/[^0-9.]/g, '') : 'N/A';
                     let origPrice = null;
                     if (prices.length >= 2) {
