@@ -305,18 +305,18 @@ if has_active_searches:
                     discount_tag = f'<span class="discount-badge">{safe_discount}</span>' if safe_discount else ''
                     discount_div = f'<div style="margin-top:4px;">{discount_tag}</div>' if discount_tag else ''
 
-                    card_html = f"""
-                    <div class="glass-card">
-                        {img_tag}
-                        <div class="product-title">{safe_name}</div>
-                        <div style="color: #cbd5e1; font-size: 0.8em; margin-bottom: 8px;">{safe_qty} | Time: {safe_delivery}</div>
-                        <div class="price-row">
-                            <span class="current-price">{safe_price}</span>
-                            {orig_price_tag}
-                        </div>
-                        {discount_div}
-                    </div>
-                    """
+                    card_html = "".join([
+                        '<div class="glass-card">',
+                        img_tag,
+                        f'<div class="product-title">{safe_name}</div>',
+                        f'<div style="color: #cbd5e1; font-size: 0.8em; margin-bottom: 8px;">{safe_qty} | Time: {safe_delivery}</div>',
+                        '<div class="price-row">',
+                        f'<span class="current-price">{safe_price}</span>',
+                        orig_price_tag,
+                        '</div>',
+                        discount_div,
+                        '</div>'
+                    ])
                     st.markdown(card_html, unsafe_allow_html=True)
             elif svc_data['status'] == 'empty':
                 st.warning(f"No products found")
