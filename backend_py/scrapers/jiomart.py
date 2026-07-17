@@ -1,6 +1,7 @@
 import urllib.parse
 import asyncio
 import time
+import zendriver as zd
 
 async def wait_for_selector(page, selector, timeout=10):
     start = time.time()
