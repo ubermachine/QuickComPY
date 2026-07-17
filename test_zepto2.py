@@ -15,6 +15,9 @@ async def main():
         tab2 = await browser.get('about:blank', new_tab=True)
         res = await search(tab2, "eggs")
         print("Found products:", len(res))
+        for p in res:
+            price_str = str(p.get('price')).replace('₹', 'Rs.')
+            print(f" - {p.get('name')} | {price_str} | Qty: {p.get('quantity')}")
         await tab2.close()
     finally:
         await browser.stop()

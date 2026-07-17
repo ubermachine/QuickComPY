@@ -132,7 +132,37 @@ async def search(page, search_term):
     lat = _lat or '28.5821195'
     lon = _lon or '77.3266991'
     
+    collected_products = []
+    resolved = {"done": False}
+
+    async def handle_response(event: zd.cdp.network.ResponseReceived):
+        if resolved["done"]: return
+        if "api/v3/search" not in event.response.url or "filters" in event.response.url: return
+        
+        print(f"[Zepto DEBUG] Intercepted URL: {event.response.url}")
+        try:
+            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
+            if body_info:
+                import json
+                json_data = json.loads(body_info[0])
+                if json_data and "layout" in json_data:
+                    for widget in json_data.get("layout", []):
+                        if widget.get("widgetId") == "PRODUCT_GRID":
+                            items = widget.get("data", {}).get("resolver", {}).get("data", {}).get("items", [])
+                            collected_products.extend(items)
+                    
+                    if collected_products:
+                        print(f"[Zepto DEBUG] Found {len(collected_products)} products via API.")
+                        resolved["done"] = True
+                else:
+                    print("[Zepto DEBUG] No layout in JSON.")
+        except Exception as e:
+            print(f"[Zepto DEBUG] Error in handle_response: {e}")
+
+    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
+    
     try:
+        await page.send(zd.cdp.network.enable())
         # Establish domain session
         await page.get("https://www.zepto.com/")
         await asyncio.sleep(1.5)
@@ -144,131 +174,72 @@ async def search(page, search_term):
         
         # Navigate to search URL
         await page.get(f"https://www.zepto.com/search?query={encoded}")
-        await asyncio.sleep(6)
-        
-        # Check serviceability on search page and fall back if not serviceable
-        cookies = await page.send(zd.cdp.network.get_cookies())
-        serviceable = True
-        for c in cookies:
-            if c.name == 'serviceability':
-                val = urllib.parse.unquote(c.value).lower().replace(" ", "")
-                if '"serviceable":false' in val:
-                    serviceable = False
-                    break
-                
-        if not serviceable:
-            print("[Zepto] Search page is not serviceable. Re-injecting Noida fallback cookies and reloading...")
-            pincode = '201301'
-            lat = '28.5821195'
-            lon = '77.3266991'
-            await inject_location_cookies(page, pincode, lat, lon)
-            await page.get(f"https://www.zepto.com/search?query={encoded}")
-            await asyncio.sleep(6)
-            try:
-                h = await page.get_content()
-                with open("zepto_fallback_search.html", "w", encoding="utf-8") as f:
-                    f.write(h)
-                print(f"[Zepto] Saved fallback HTML to zepto_fallback_search.html, len={len(h)}")
-            except Exception as e:
-                print(f"[Zepto] Error saving debug html: {e}")
-            
-        products = await extract_from_html(page)
-        
-        # Retry once if 0 products
-        if not products:
-            print("[Zepto] No products found, waiting 3s and retrying...")
-            await asyncio.sleep(3)
-            products = await extract_from_html(page)
-            
-        return products
-    except Exception as e:
-        print(f"[Zepto] Search error: {e}")
+    except Exception:
+        pass
+
+    # Wait for API to fire
+    for _ in range(120): # 12 seconds max
+        if resolved["done"]: break
+        await asyncio.sleep(0.1)
+
+    page.remove_handlers(zd.cdp.network.ResponseReceived)
+
+    if not collected_products:
+        print("[Zepto] No products found via API interception.")
         return []
 
-async def extract_from_html(page):
-    """Extract products from Zepto search page"""
-    try:
-        return await page.evaluate("""(() => {
-            const products = [];
+    return extract_products(collected_products)
+
+def extract_products(items):
+    products = []
+    for item in items:
+        try:
+            prod_resp = item.get("productResponse")
+            if not prod_resp: continue
             
-            // Find product cards - multiple selectors for resilience
-            const cards = document.querySelectorAll(
-                'a[href*="/pn/"], a.B4vNQ, a[data-testid="product-card"], [class*="ProductCard"], [data-testid="product-card"], [class*="search"], a[href*="/product/"], div[class*="item"] a, li a'
-            );
+            product = prod_resp.get("product", {})
+            variant = prod_resp.get("productVariant", {})
             
-            for (const card of cards) {
-                try {
-                    const text = card.textContent.replace(/\\s+/g, ' ').trim();
-                    if (!text || text.length < 10 || (!text.includes('₹') && !text.match(/\\d+/))) continue;
-                    
-                    // Name: from data-slot-id or image alt (skip if neither)
-                    let name = '';
-                    const nameEl = card.querySelector('[data-slot-id="ProductName"]');
-                    if (nameEl) {
-                        name = nameEl.textContent.trim();
-                    } else {
-                        // Fallback: try image alt attribute
-                        const img = card.querySelector('img');
-                        name = img ? (img.alt || '').trim() : '';
-                        if (!name) continue;
-                    }
-                    if (!name || name.length < 2) continue;
-                    
-                    // Quantity
-                    let quantity = '1 item';
-                    const packEl = card.querySelector('[data-slot-id="PackSize"]');
-                    if (packEl) {
-                        quantity = packEl.textContent.trim();
-                    }
-                    
-                    // Prices: try DOM selector first, fall back to regex
-                    let priceEl = card.querySelector('div[data-slot-id="EdlpPrice"] span');
-                    let priceTxt = priceEl ? priceEl.textContent.trim() : '';
-                    const prices = priceTxt ? [priceTxt] : (text.match(/₹[0-9,.]+/g) || []);
-                    let price = prices.length > 0 ? '₹' + prices[0].replace(/[^0-9.]/g, '') : 'N/A';
-                    let origPrice = null;
-                    if (prices.length >= 2) {
-                        const second = '₹' + prices[1].replace(/[^0-9.]/g, '');
-                        if (second !== price) origPrice = second;
-                    }
-                    
-                    // Image
-                    const img = card.querySelector('img');
-                    const imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
-                    
-                    // Availability
-                    const isOutOfStock = (card.textContent || '').toLowerCase().includes('out of stock');
-                    
-                    // Savings
-                    let savings = null;
-                    let discount = null;
-                    if (price !== 'N/A' && origPrice) {
-                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
-                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
-                        if (mrpVal > spVal) {
-                            savings = '₹' + (mrpVal - spVal).toFixed(2);
-                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
-                        }
-                    }
-                    
-                    products.push({
-                        id: 'zp_' + products.length,
-                        name: name.replace(/\\s+/g, ' ').trim(),
-                        price,
-                        originalPrice: origPrice,
-                        savings,
-                        quantity,
-                        deliveryTime: '10 mins',
-                        discount,
-                        imageUrl,
-                        available: !isOutOfStock,
-                        source: 'zepto'
-                    });
-                } catch(e) {}
-            }
+            pid = prod_resp.get("id") or product.get("id") or "Unknown"
+            name = product.get("name", "Unknown")
             
-            return products.slice(0, 8);
-        })()""")
-    except Exception as e:
-        print(f"[Zepto] HTML extraction error: {e}")
-        return []
+            sp_paise = prod_resp.get("sellingPrice") or prod_resp.get("discountedSellingPrice") or 0
+            mrp_paise = prod_resp.get("mrp") or sp_paise
+            
+            price = f"₹{sp_paise / 100:.2f}".rstrip('0').rstrip('.') if sp_paise else "N/A"
+            orig_price = f"₹{mrp_paise / 100:.2f}".rstrip('0').rstrip('.') if mrp_paise else None
+            
+            savings = None
+            discount = None
+            if mrp_paise > sp_paise and sp_paise > 0:
+                savings = f"₹{(mrp_paise - sp_paise) / 100:.2f}".rstrip('0').rstrip('.')
+                discount = f"{int(round(((mrp_paise - sp_paise) / mrp_paise) * 100))}% OFF"
+            
+            quantity = variant.get("formattedPacksize", "1 item")
+            
+            images = variant.get("images", [])
+            image_url = ""
+            if images:
+                image_path = images[0].get("path", "")
+                if image_path:
+                    image_url = f"https://cdn.zeptonow.com/{image_path}"
+                    
+            available = not prod_resp.get("outOfStock", False)
+            
+            products.append({
+                "id": pid,
+                "name": name,
+                "price": price,
+                "originalPrice": orig_price if orig_price != price else None,
+                "savings": savings,
+                "quantity": quantity,
+                "deliveryTime": "10 mins",
+                "discount": discount,
+                "imageUrl": image_url,
+                "available": available,
+                "source": "zepto"
+            })
+        except Exception:
+            pass
+            
+    return products[:8]
