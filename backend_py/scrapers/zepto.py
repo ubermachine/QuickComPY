@@ -169,20 +169,24 @@ async def search(page, search_term):
             # Remove failed request so we don't block; next matching response will be tried
             target_requests.discard(event.request_id)
 
+    try:
+        await page.send(zd.cdp.network.enable())
+        # Establish domain session and set cookies BEFORE adding handlers
+        await page.get("https://www.zepto.com/")
+        await asyncio.sleep(1.5)
+        
+        # Set location cookies
+        await page.send(zd.cdp.network.set_cookie(name='latitude', value=lat, domain='.zepto.com', path='/', secure=True))
+        await page.send(zd.cdp.network.set_cookie(name='longitude', value=lon, domain='.zepto.com', path='/', secure=True))
+        await page.send(zd.cdp.network.set_cookie(name='location', value=pincode, domain='.zepto.com', path='/', secure=True))
+    except Exception:
+        pass
+
+    # Add handlers AFTER homepage load so we only capture the actual search API response
     page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
     page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
     
     try:
-        await page.send(zd.cdp.network.enable())
-        # Establish domain session
-        await page.get("https://www.zepto.com/")
-        await asyncio.sleep(1.5)
-        
-        # Set location cookies WITHOUT deleting serviceability (already set by set_location)
-        await page.send(zd.cdp.network.set_cookie(name='latitude', value=lat, domain='.zepto.com', path='/', secure=True))
-        await page.send(zd.cdp.network.set_cookie(name='longitude', value=lon, domain='.zepto.com', path='/', secure=True))
-        await page.send(zd.cdp.network.set_cookie(name='location', value=pincode, domain='.zepto.com', path='/', secure=True))
-        
         # Navigate to search URL
         await page.get(f"https://www.zepto.com/search?query={encoded}")
     except Exception:

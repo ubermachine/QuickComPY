@@ -85,7 +85,7 @@ def get_browser_and_loop():
             
             # Initialize global semaphore for scraping concurrency limits
             async def init_sem():
-                loop.global_semaphore = asyncio.Semaphore(2)
+                loop.global_semaphore = asyncio.Semaphore(4)
             loop.run_until_complete(init_sem())
             
             print("Zendriver initialized successfully on background thread!")
@@ -160,7 +160,7 @@ async def search_svc(svc, search_term):
     page = None
     try:
         page = await stealth_new_page(global_browser)
-        products = await asyncio.wait_for(SCRAPERS[svc].search(page, search_term), timeout=30.0)
+        products = await asyncio.wait_for(SCRAPERS[svc].search(page, search_term), timeout=45.0)
         return svc, products
     except Exception as e:
         print(f"Search error {svc}: {type(e).__name__} - {e}")

@@ -131,15 +131,20 @@ async def search(page, search_term):
         except Exception as e:
             pass
 
+    try:
+        await page.send(zd.cdp.network.enable())
+        # Establish session first BEFORE adding handlers to avoid capturing homepage noise
+        if "jiomart.com" not in page.url:
+            await page.get("https://www.jiomart.com/")
+            await asyncio.sleep(2)
+    except Exception:
+        pass
+
+    # Add handlers AFTER homepage load to avoid capturing irrelevant JSON
     page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
     page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
 
     try:
-        await page.send(zd.cdp.network.enable())
-        # Establish session first if needed
-        if "jiomart.com" not in page.url:
-            await page.get("https://www.jiomart.com/")
-            await asyncio.sleep(1.5)
         await page.get(f"https://www.jiomart.com/products?q={encoded}")
     except Exception:
         pass
