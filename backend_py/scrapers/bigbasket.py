@@ -56,109 +56,106 @@ async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[Bigbasket] Searching for: {search_term}")
 
+    collected_products = []
+    resolved = {"done": False}
+    target_requests = set()
+
+    async def handle_response(event: zd.cdp.network.ResponseReceived):
+        if resolved["done"]: return
+        if "listing-svc/v2/products" in event.response.url and event.response.mime_type == "application/json":
+            target_requests.add(event.request_id)
+
+    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
+        if resolved["done"]: return
+        if event.request_id not in target_requests: return
+        
+        try:
+            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
+            if body_info:
+                import json
+                json_data = json.loads(body_info[0])
+                tabs = json_data.get("tabs", [])
+                if tabs:
+                    product_info = tabs[0].get("product_info", {})
+                    products = product_info.get("products", [])
+                    
+                    for p in products:
+                        try:
+                            pid = str(p.get("id", ""))
+                            name = p.get("desc", "Unknown")
+                            brand = p.get("brand", {}).get("name", "")
+                            if brand and brand.lower() not in name.lower():
+                                name = f"{brand} {name}"
+                                
+                            pricing = p.get("pricing", {})
+                            price_info = pricing.get("price", {})
+                            
+                            sp = price_info.get("sp")
+                            mrp = price_info.get("mrp")
+                            
+                            price = f"₹{sp}" if sp else "N/A"
+                            orig_price = f"₹{mrp}" if mrp and str(mrp) != str(sp) else None
+                            
+                            savings = None
+                            discount = None
+                            if sp and mrp:
+                                try:
+                                    f_sp = float(sp)
+                                    f_mrp = float(mrp)
+                                    if f_mrp > f_sp:
+                                        savings = f"₹{int(f_mrp - f_sp)}"
+                                        discount = f"{int(((f_mrp - f_sp)/f_mrp)*100)}% OFF"
+                                except Exception:
+                                    pass
+                                    
+                            quantity = p.get("weight", "1 item")
+                            
+                            images = p.get("images", [])
+                            image_url = ""
+                            if images and isinstance(images, list):
+                                image_url = images[0].get("m", "") or images[0].get("s", "")
+                            
+                            # Bigbasket standard delivery is usually listed as "Standard Delivery" or derived
+                            delivery_time = "Standard Delivery"
+                            
+                            available = True # If it's in the search results, it's usually available unless marked
+                            
+                            collected_products.append({
+                                "id": f"bb_{pid}",
+                                "name": name,
+                                "price": price,
+                                "originalPrice": orig_price,
+                                "savings": savings,
+                                "quantity": quantity,
+                                "deliveryTime": delivery_time,
+                                "discount": discount,
+                                "imageUrl": image_url,
+                                "available": available,
+                                "source": "bigbasket"
+                            })
+                        except Exception as e:
+                            print(f"[Bigbasket] Extractor loop error: {e}")
+                    
+                    if collected_products:
+                        resolved["done"] = True
+        except Exception as e:
+            pass
+
+    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
+    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
+
     try:
+        await page.send(zd.cdp.network.enable())
         await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
-        await asyncio.sleep(5)
+    except Exception:
+        pass
 
-        products = await extract_from_html(page)
+    # Wait for API to fire
+    for _ in range(150): # 15 seconds max
+        if resolved["done"]: break
+        await asyncio.sleep(0.1)
 
-        if not products:
-            print("[Bigbasket] No products found, retrying after 3s...")
-            await asyncio.sleep(3)
-            products = await extract_from_html(page)
+    page.remove_handlers(zd.cdp.network.ResponseReceived)
+    page.remove_handlers(zd.cdp.network.LoadingFinished)
 
-        return products
-    except Exception as e:
-        print(f"[Bigbasket] Search error: {e}")
-        return []
-
-async def extract_from_html(page):
-    """Extract products from Bigbasket rendered Next.js page"""
-    try:
-        return await page.evaluate("""(function() {
-            var products = [];
-            var allLi = document.querySelectorAll('li');
-            for (var i = 0; i < allLi.length; i++) {
-                var li = allLi[i];
-                var text = (li.textContent || '').replace(/\\s+/g, ' ').trim();
-                if (text.indexOf('\\u20B9') < 0 || text.length < 35) continue;
-                if (text.indexOf('Shop by') >= 0 || text.indexOf('Category') >= 0 || text.indexOf('Filter') >= 0) continue;
-                
-                try {
-                    var img = li.querySelector('img');
-                    var imageUrl = img ? (img.src || img.getAttribute('data-src') || '') : '';
-                    
-                    var parts = text.split('\\u20B9');
-                    if (parts.length < 2) continue;
-                    
-                    var beforePrice = parts[0].trim();
-                    beforePrice = beforePrice.replace(/^\\d+\\s*mins?\\s*/i, '').trim();
-                    beforePrice = beforePrice.replace(/\\b(?:ADD|Add|add|BUY|Buy|buy)\\s*$/i, '').trim();
-                    beforePrice = beforePrice.replace(/\\d+\\.?\\d*\\s*Ratings?\\s*/ig, '').trim();
-                    beforePrice = beforePrice.replace(/\\(?[\\d.]+[kK]?\\)?\\s*$/, '').trim();
-                    
-                    var name = beforePrice.replace(/^\\d+\\s*/, '').trim();
-                    // Un-squash words: insert space before uppercase following lowercase (camelCase)
-                    name = name.replace(/([a-z])([A-Z])/g, '$1 $2');
-                    // Insert space between letter and adjacent digit
-                    name = name.replace(/([a-zA-Z])(\\d)/g, '$1 $2');
-                    name = name.replace(/(\\d)([a-zA-Z])/g, '$1 $2');
-                    // Collapse multiple spaces and trim again
-                    name = name.replace(/\\s+/g, ' ').trim();
-                    if (!name || name.length < 3) continue;
-                    
-                    var priceMatch = text.match(/\\u20B9\\s*[\\d,]+(?:\\.\\d{1,2})?/);
-                    var price = priceMatch ? priceMatch[0].trim() : 'N/A';
-                    
-                    var allPrices = text.match(/\\u20B9\\s*[\\d,]+(?:\\.\\d{1,2})?/g) || [];
-                    var origPrice = (allPrices.length > 1 && allPrices[1] !== price) ? allPrices[1].trim() : null;
-                    
-                    var quantity = '';
-                    var qtyMatch = text.match(/(\\d+\\s*(?:g|kg|ml|l|L|pc|pcs|pack|piece|pouch|strip|tablet|sachet|bottle|box|can|jar|tin|tube|pair|set))\\b/i);
-                    if (qtyMatch) quantity = qtyMatch[1];
-                    
-                    var deliveryTime = 'Standard Delivery';
-                    var timeMatch = text.match(/(\\d+)\\s*mins?/i);
-                    if (timeMatch) deliveryTime = timeMatch[0];
-                    
-                    var savings = null;
-                    var discount = null;
-                    if (price !== 'N/A' && origPrice) {
-                        var spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
-                        var mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
-                        if (mrpVal > spVal) {
-                            savings = '\\u20B9' + (mrpVal - spVal).toFixed(2);
-                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
-                        }
-                    }
-                    
-                    products.push({
-                        id: 'bb_' + products.length,
-                        name: name.substring(0, 200),
-                        price: price,
-                        originalPrice: origPrice,
-                        savings: savings,
-                        quantity: quantity,
-                        deliveryTime: deliveryTime,
-                        discount: discount,
-                        imageUrl: imageUrl,
-                        available: text.toLowerCase().indexOf('out of stock') < 0,
-                        source: 'bigbasket'
-                    });
-                } catch(e) {}
-            }
-            
-            var seen = {};
-            var unique = [];
-            for (var j = 0; j < products.length && unique.length < 8; j++) {
-                var key = products[j].name.substring(0, 25);
-                if (!seen[key]) {
-                    seen[key] = true;
-                    unique.push(products[j]);
-                }
-            }
-            return unique;
-        })()""")
-    except Exception as e:
-        print(f"[Bigbasket] HTML extraction error: {e}")
-        return []
+    return collected_products[:8]

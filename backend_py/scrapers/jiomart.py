@@ -56,85 +56,100 @@ async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[JioMart] Searching for: {search_term}")
 
+    collected_products = []
+    resolved = {"done": False}
+    target_requests = set()
+
+    async def handle_response(event: zd.cdp.network.ResponseReceived):
+        if resolved["done"]: return
+        if "jiomart.com" in event.response.url and event.response.mime_type == "application/json":
+            # The search API is typically /ext/vertex/application/api/v1.0/products or similar
+            if "products" in event.response.url or "search" in event.response.url:
+                target_requests.add(event.request_id)
+
+    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
+        if resolved["done"]: return
+        if event.request_id not in target_requests: return
+        
+        try:
+            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
+            if body_info:
+                import json
+                json_data = json.loads(body_info[0])
+                items = json_data.get("items", [])
+                
+                for item in items:
+                    try:
+                        pid = str(item.get("uid", ""))
+                        name = item.get("name", "Unknown")
+                        
+                        price_obj = item.get("price", {})
+                        sp = price_obj.get("effective", {}).get("min")
+                        mrp = price_obj.get("marked", {}).get("min")
+                        
+                        price = f"₹{sp}" if sp else "N/A"
+                        orig_price = f"₹{mrp}" if mrp and str(mrp) != str(sp) else None
+                        
+                        savings = None
+                        discount = None
+                        if sp and mrp:
+                            try:
+                                f_sp = float(sp)
+                                f_mrp = float(mrp)
+                                if f_mrp > f_sp:
+                                    savings = f"₹{int(f_mrp - f_sp)}"
+                                    discount = f"{int(((f_mrp - f_sp)/f_mrp)*100)}% OFF"
+                            except Exception:
+                                pass
+                                
+                        # JioMart doesn't always have an explicit weight field at the top level
+                        quantity = "1 item"
+                        
+                        medias = item.get("medias", [])
+                        image_url = medias[0].get("url", "") if medias else ""
+                        
+                        available = item.get("sellable", True)
+                        
+                        collected_products.append({
+                            "id": f"jm_{pid}",
+                            "name": name,
+                            "price": price,
+                            "originalPrice": orig_price,
+                            "savings": savings,
+                            "quantity": quantity,
+                            "deliveryTime": "Standard Delivery",
+                            "discount": discount,
+                            "imageUrl": image_url,
+                            "available": available,
+                            "source": "jiomart"
+                        })
+                    except Exception as e:
+                        print(f"[JioMart] Extractor loop error: {e}")
+                
+                if collected_products:
+                    resolved["done"] = True
+        except Exception as e:
+            pass
+
+    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
+    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
+
     try:
+        await page.send(zd.cdp.network.enable())
         # Establish session first if needed
         if "jiomart.com" not in page.url:
             await page.get("https://www.jiomart.com/")
             await asyncio.sleep(1.5)
         await page.get(f"https://www.jiomart.com/products?q={encoded}")
-        await asyncio.sleep(6)
+    except Exception:
+        pass
 
-        # Wait for product cards to appear (poll up to 15s)
-        await wait_for_selector(page, ".productCard__productTitle", timeout=15)
+    # Wait for API to fire
+    for _ in range(150): # 15 seconds max
+        if resolved["done"]: break
+        await asyncio.sleep(0.1)
 
-        products = await extract_from_html(page)
+    page.remove_handlers(zd.cdp.network.ResponseReceived)
+    page.remove_handlers(zd.cdp.network.LoadingFinished)
 
-        # Retry once if extraction returned 0 products
-        if not products:
-            print("[JioMart] No products found on first attempt, retrying after 3s...")
-            await asyncio.sleep(3)
-            products = await extract_from_html(page)
-
-        return products
-    except Exception as e:
-        print(f"[JioMart] Search error: {e}")
-        return []
-
-async def extract_from_html(page):
-    try:
-        return await page.evaluate("""
-        (() => {
-            const products = [];
-            const cards = document.querySelectorAll('.productCard__cardWrapper, .plp-card');
-            cards.forEach((card, idx) => {
-                try {
-                    if (card.className && card.className.includes('Skeleton')) return;
-                    
-                    const nameEl = card.querySelector('.productCard__productTitle, .plp-card-title, h3');
-                    const name = nameEl ? nameEl.textContent.trim() : 'Unknown';
-                    if (!name || name === 'Unknown') return;
-                    
-                    const priceEl = card.querySelector('.PriceContainer__currentPrice, .plp-card-price, .jm-price');
-                    const price = priceEl ? priceEl.textContent.trim() : 'N/A';
-                    
-                    const origEl = card.querySelector('.PriceContainer__originalPrice, .plp-card-mrp, .jm-mrp');
-                    const origPrice = origEl ? origEl.textContent.trim() : null;
-                    
-                    const qtyEl = card.querySelector('.productCard__sizeSpan, .productCard__quantitySelector, .plp-card-qty');
-                    const quantity = qtyEl ? qtyEl.textContent.trim() : '';
-                    
-                    const imgEl = card.querySelector('.productCard__productImage, img');
-                    const imageUrl = imgEl ? (imgEl.src || imgEl.getAttribute('data-src') || '') : '';
-                    
-                    let savings = null;
-                    let discount = null;
-                    if (price && origPrice) {
-                        const spVal = parseFloat(price.replace(/[^0-9.]/g, ''));
-                        const mrpVal = parseFloat(origPrice.replace(/[^0-9.]/g, ''));
-                        if (mrpVal > spVal) {
-                            savings = '₹' + (mrpVal - spVal).toFixed(2);
-                            discount = Math.round(((mrpVal - spVal) / mrpVal) * 100) + '% OFF';
-                        }
-                    }
-                    
-                    products.push({
-                        id: 'jm_' + idx,
-                        name,
-                        price,
-                        originalPrice: origPrice,
-                        savings,
-                        quantity,
-                        deliveryTime: "Standard Delivery",
-                        discount,
-                        imageUrl,
-                        available: true,
-                        source: 'jiomart'
-                    });
-                } catch(e) {}
-            });
-            return products.slice(0, 8);
-        })()
-        """)
-    except Exception as e:
-        print(f"[JioMart] HTML extraction error: {e}")
-        return []
+    return collected_products[:8]

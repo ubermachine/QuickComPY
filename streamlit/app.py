@@ -282,10 +282,12 @@ st.markdown("<br/>", unsafe_allow_html=True)
 has_active_searches = any(data['status'] != 'idle' for data in st.session_state.services.values())
 
 if has_active_searches:
-    vendor_cols = st.columns(len(SERVICES))
+    # Enforce strict 3-column grid layout to prevent narrow wrapping
+    cols_per_row = 3
+    vendor_cols = st.columns(cols_per_row)
     
     for i, (svc_name, svc_data) in enumerate(st.session_state.services.items()):
-        with vendor_cols[i]:
+        with vendor_cols[i % cols_per_row]:
             st.markdown(f"<div style='text-align:center;'><div class='brand-badge bg-{svc_name}'>{svc_name}</div></div>", unsafe_allow_html=True)
             
             if svc_data['status'] == 'success':

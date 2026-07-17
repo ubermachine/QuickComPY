@@ -87,11 +87,17 @@ async def search(page, search_term):
 
     collected_snippets = []
     resolved = {"done": False}
+    target_requests = set()
 
     async def handle_response(event: zd.cdp.network.ResponseReceived):
         if resolved["done"]: return
         if "blinkit.com/v1/layout/search" not in event.response.url: return
+        target_requests.add(event.request_id)
 
+    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
+        if resolved["done"]: return
+        if event.request_id not in target_requests: return
+        
         try:
             body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
             if body_info:
@@ -99,23 +105,27 @@ async def search(page, search_term):
                 if json_data and "response" in json_data and "snippets" in json_data["response"]:
                     snippets = json_data["response"]["snippets"]
                     collected_snippets.extend(snippets)
-                    resolved["done"] = True
-        except Exception:
+                    if collected_snippets:
+                        resolved["done"] = True
+        except Exception as e:
             pass
 
     page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
+    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
 
     try:
+        await page.send(zd.cdp.network.enable())
         await page.get(f"https://blinkit.com/s/?q={encoded}")
     except Exception:
         pass
 
     # Wait for API to fire
-    for _ in range(80): # 8 seconds max
+    for _ in range(120): # 12 seconds max
         if resolved["done"]: break
         await asyncio.sleep(0.1)
 
     page.remove_handlers(zd.cdp.network.ResponseReceived)
+    page.remove_handlers(zd.cdp.network.LoadingFinished)
 
     if not collected_snippets:
         return []
