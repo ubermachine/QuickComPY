@@ -135,11 +135,19 @@ async def search(page, search_term):
     collected_products = []
     resolved = {"done": False}
 
+    target_requests = set()
+
     async def handle_response(event: zd.cdp.network.ResponseReceived):
         if resolved["done"]: return
         if "api/v3/search" not in event.response.url or "filters" in event.response.url: return
+        print(f"[Zepto DEBUG] Intercepted URL (response headers): {event.response.url}")
+        target_requests.add(event.request_id)
+
+    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
+        if resolved["done"]: return
+        if event.request_id not in target_requests: return
         
-        print(f"[Zepto DEBUG] Intercepted URL: {event.response.url}")
+        print(f"[Zepto DEBUG] Loading finished for request: {event.request_id}")
         try:
             body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
             if body_info:
@@ -157,9 +165,12 @@ async def search(page, search_term):
                 else:
                     print("[Zepto DEBUG] No layout in JSON.")
         except Exception as e:
-            print(f"[Zepto DEBUG] Error in handle_response: {e}")
+            print(f"[Zepto DEBUG] Error in handle_loading_finished: {e}")
+            # Remove failed request so we don't block; next matching response will be tried
+            target_requests.discard(event.request_id)
 
     page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
+    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
     
     try:
         await page.send(zd.cdp.network.enable())
@@ -183,6 +194,7 @@ async def search(page, search_term):
         await asyncio.sleep(0.1)
 
     page.remove_handlers(zd.cdp.network.ResponseReceived)
+    page.remove_handlers(zd.cdp.network.LoadingFinished)
 
     if not collected_products:
         print("[Zepto] No products found via API interception.")

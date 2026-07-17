@@ -282,8 +282,8 @@ st.markdown("<br/>", unsafe_allow_html=True)
 has_active_searches = any(data['status'] != 'idle' for data in st.session_state.services.values())
 
 if has_active_searches:
-    # Enforce strict 3-column grid layout to prevent narrow wrapping
-    cols_per_row = 3
+    # Enforce strict 4-column grid layout for all vendors side-by-side
+    cols_per_row = 4
     vendor_cols = st.columns(cols_per_row)
     
     for i, (svc_name, svc_data) in enumerate(st.session_state.services.items()):

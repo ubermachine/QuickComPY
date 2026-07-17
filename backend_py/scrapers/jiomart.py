@@ -62,10 +62,10 @@ async def search(page, search_term):
 
     async def handle_response(event: zd.cdp.network.ResponseReceived):
         if resolved["done"]: return
-        if "jiomart.com" in event.response.url and event.response.mime_type == "application/json":
-            # The search API is typically /ext/vertex/application/api/v1.0/products or similar
-            if "products" in event.response.url or "search" in event.response.url:
-                target_requests.add(event.request_id)
+        if event.response.mime_type != "application/json": return
+        # Only intercept the specific vertex search API endpoint
+        if "ext/vertex/application/api" in event.response.url and "products" in event.response.url:
+            target_requests.add(event.request_id)
 
     async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
         if resolved["done"]: return

@@ -88,10 +88,11 @@ async def search(page, search_term):
                                 name = f"{brand} {name}"
                                 
                             pricing = p.get("pricing", {})
-                            price_info = pricing.get("price", {})
+                            discount_info = pricing.get("discount", {})
+                            prim_price = discount_info.get("prim_price", {})
                             
-                            sp = price_info.get("sp")
-                            mrp = price_info.get("mrp")
+                            sp = prim_price.get("sp")
+                            mrp = discount_info.get("mrp")
                             
                             price = f"₹{sp}" if sp else "N/A"
                             orig_price = f"₹{mrp}" if mrp and str(mrp) != str(sp) else None
@@ -108,7 +109,7 @@ async def search(page, search_term):
                                 except Exception:
                                     pass
                                     
-                            quantity = p.get("weight", "1 item")
+                            quantity = p.get("w", "") or p.get("weight", "") or "1 item"
                             
                             images = p.get("images", [])
                             image_url = ""
