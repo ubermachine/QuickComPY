@@ -1,0 +1,79 @@
+{
+  "website": {
+    "enabled": true,
+    "basepath": "/"
+  },
+  "cors": {
+    "domains": []
+  },
+  "auth": {
+    "enabled": true
+  },
+  "_id": "685945f46c8c7aee3f3af605",
+  "name": "JioMart: India's online shopping",
+  "description": "",
+  "logo": {
+    "secure_url": "https://cdn.pixelbin.io/v2/jio-mart-2/MOluAr/original/jiomarty0/company/1/applications/68428b644ba37cc929cd3d11/application/pictures/free-logo/original/H1DLPW7NF-JioMart-Marketplace.png"
+  },
+  "favicon": {
+    "secure_url": "https://cdn.pixelbin.io/v2/jio-mart-2/MOluAr/original/jiomarty0/company/2/applications/663e2332b7031043551ad694/application/pictures/favicon/original/2UHh4D6h1-JioMart-Indias-online-shopping-destination.png"
+  },
+  "banner": {
+    "secure_url": "https://cdn.fynd.com/v2/falling-surf-7c8bb8/fyprod/wrkr/misc/pictures/application-logos/original/D2fr98CUH-JioMart-Groceries.png"
+  },
+  "owner": "d6fcda42499b3f6a7b4a6822",
+  "domains": [
+    {
+      "name": "beta.jiomartjcp.com",
+      "verified": true,
+      "is_primary": false,
+      "is_shortlink": false,
+      "_id": "68595cee231d038c887095c7"
+    },
+    {
+      "name": "store1.jiomartjcp.com",
+      "verified": true,
+      "is_primary": true,
+      "is_shortlink": true,
+      "_id": "68f10547685972be2182c624"
+    },
+    {
+      "name": "www.jiomart.com",
+      "verified": true,
+      "is_primary": false,
+      "is_shortlink": false,
+      "_id": "69f0f230fc27ff793899a00b"
+    }
+  ],
+  "company_id": 1,
+  "channel_type": "jiomart-marketplace",
+  "cache_ttl": -1,
+  "is_active": true,
+  "mode": "live",
+  "status": "active",
+  "token": "TpKw7wD9h",
+  "tokens": [
+    {
+      "token": "TpKw7wD9h",
+      "created_at": "2025-06-23T12:17:57.011Z"
+    }
+  ],
+  "redirections": [],
+  "meta": [],
+  "created_at": "2025-06-23T12:17:57.011Z",
+  "modified_at": "2026-04-28T17:45:20.161Z",
+  "slug": "jiomart-marketplace-iq5-90",
+  "__v": 6,
+  "mobile_logo": {
+    "secure_url": "https://cdn.pixelbin.io/v2/jio-mart-2/MOluAr/original/jiomarty0/company/1/applications/68428b644ba37cc929cd3d11/application/pictures/free-logo/original/H1DLPW7NF-JioMart-Marketplace.png"
+  },
+  "domain": {
+    "name": "store1.jiomartjcp.com",
+    "verified": true,
+    "is_primary": true,
+    "is_shortlink": true,
+    "_id": "68f10547685972be2182c624"
+  },
+  "id": "685945f46c8c7aee3f3af605",
+  "is_internal": true
+}

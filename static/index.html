@@ -62,7 +62,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         /* Grid Layout */
-        #results-container { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-top: 2rem; display: none; }
+        #results-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem; margin-top: 2rem; display: none; }
         .vendor-col { display: flex; flex-direction: column; gap: 1rem; }
         .vendor-header { text-align: center; margin-bottom: 1rem; }
         
@@ -71,6 +71,7 @@
         .bg-bigbasket { background: linear-gradient(90deg, #84cc16, #65a30d); }
         .bg-jiomart { background: linear-gradient(90deg, #3b82f6, #2563eb); }
         .bg-zepto { background: linear-gradient(90deg, #8b5cf6, #6d28d9); }
+        .bg-instamart { background: linear-gradient(90deg, #f97316, #ea580c); }
         .vendor-count { color: #94a3b8; font-size: 0.85em; margin-top: 0.25rem; }
         
         /* Glass Cards */
@@ -151,7 +152,8 @@
     </div>
 
     <script>
-        const SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto"];
+        const SERVICES = ["blinkit", "instamart", "bigbasket", "jiomart", "zepto"];
+        const DISPLAY_NAMES = { blinkit: "Blinkit", instamart: "Swiggy", bigbasket: "BigBasket", jiomart: "JioMart", zepto: "Zepto" };
         let isLocationSet = false;
 
         function setPincode(code) {
@@ -190,10 +192,11 @@
                 badgesDiv.innerHTML = '';
                 
                 for(const svc of SERVICES) {
+                    const name = DISPLAY_NAMES[svc] || svc;
                     if(data[svc]) {
-                        badgesDiv.innerHTML += `<span class="badge-ok">[OK] ${svc.charAt(0).toUpperCase() + svc.slice(1)}</span>`;
+                        badgesDiv.innerHTML += `<span class="badge-ok">[OK] ${name}</span>`;
                     } else {
-                        badgesDiv.innerHTML += `<span class="badge-err">[ERR] ${svc.charAt(0).toUpperCase() + svc.slice(1)} Failed</span>`;
+                        badgesDiv.innerHTML += `<span class="badge-err">[ERR] ${name} Failed</span>`;
                     }
                 }
                 
@@ -273,7 +276,7 @@
                 const header = document.createElement('div');
                 header.className = 'vendor-header';
                 header.innerHTML = `
-                    <div class="brand-badge bg-${svc}">${svc}</div>
+                    <div class="brand-badge bg-${svc}">${DISPLAY_NAMES[svc] || svc}</div>
                     <div class="vendor-count">Found ${products.length} items</div>
                 `;
                 col.appendChild(header);

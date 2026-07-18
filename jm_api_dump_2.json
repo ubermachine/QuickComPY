@@ -1,0 +1,93 @@
+{
+  "data": [
+    {
+      "sub_type": "pincode",
+      "name": "400001",
+      "error": {
+        "type": null,
+        "value": null,
+        "message": null
+      },
+      "uid": "6851881d34bc6fd8a2876b47",
+      "display_name": "400001",
+      "meta": {
+        "685945f46c8c7aee3f3af605": {
+          "zone": "west",
+          "mbv_config": [
+            {
+              "department": "Groceries",
+              "min_basket_value": 99
+            }
+          ]
+        }
+      },
+      "parents": [
+        {
+          "uid": "64aff96f9ed6a9d76597c317",
+          "name": "INDIA",
+          "display_name": "India",
+          "sub_type": "country"
+        },
+        {
+          "uid": "6851881c34bc6fd8a2874563",
+          "name": "MAHARASHTRA",
+          "display_name": "MAHARASHTRA",
+          "sub_type": "state"
+        },
+        {
+          "uid": "6851881c34bc6fd8a287497a",
+          "name": "MUMBAI",
+          "display_name": "MUMBAI",
+          "sub_type": "city"
+        }
+      ],
+      "lat_long": {
+        "type": "Point",
+        "coordinates": [
+          72.8919,
+          18.6291
+        ]
+      },
+      "meta_code": {
+        "iso2": "IN",
+        "iso3": "IND",
+        "currency": {
+          "code": "INR",
+          "name": "Indian Rupee",
+          "symbol": "\u20b9"
+        },
+        "latitude": "28.6667",
+        "longitude": "77.2167",
+        "phone_code": "+91",
+        "zone": "red",
+        "deliverables": [
+          "essential"
+        ],
+        "parent_id": null,
+        "hierarchy": [
+          {
+            "display_name": "Pincode",
+            "slug": "pincode"
+          },
+          {
+            "display_name": "City",
+            "slug": "city"
+          },
+          {
+            "display_name": "State",
+            "slug": "state"
+          }
+        ],
+        "country_code": "IN"
+      }
+    }
+  ],
+  "error": {
+    "type": null,
+    "value": null,
+    "message": null
+  },
+  "success": true,
+  "request_uuid": "79690e480c82645f2e700b585181b518",
+  "stormbreaker_uuid": "d20e1a7f-8381-4e99-b844-f4a04050d38e"
+}

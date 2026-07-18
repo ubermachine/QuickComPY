@@ -1,0 +1,249 @@
+{
+  "_id": "68595470e384076db6ec8fe2",
+  "application": "685945f46c8c7aee3f3af605",
+  "company": "1",
+  "tags": [
+    {
+      "name": "retail-redirection",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "body-bottom",
+      "pages": [],
+      "__source": {
+        "type": "extension",
+        "id": "685c1e6a99a278a107756277"
+      },
+      "_id": "68f1f5c5ee7da07b5d1a0c5a",
+      "content": "\nwindow.ucpRetailAuth = {\n    openLogin: function (redirect_url) {\n        let app_id = window.APP_DATA.applicationID\n        let return_ui_url = redirect_url ? encodeURIComponent(redirect_url) : encodeURIComponent(window.location.href)\n        let url = `/ext/retail-auth/ui/login?application_id=${app_id}&return_ui_url=${return_ui_url}`\n        window.location.replace(url);\n    },\n    openProfile: function (redirect_url) {\n        let app_id = window.APP_DATA.applicationID\n        let return_ui_url = redirect_url ? encodeURIComponent(redirect_url) : encodeURIComponent(window.location.href)\n        let url = `/ext/retail-auth/ui/profile-redirect?application_id=${app_id}&return_ui_url=${return_ui_url}`\n        window.location.replace(url);\n    }\n}\n"
+    },
+    {
+      "name": "How to buy on Jiomart New",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "body-bottom",
+      "pages": [
+        {
+          "page_slug": "page",
+          "type": "system"
+        }
+      ],
+      "_id": "6909847bfafea3d456db4f2b",
+      "content": "(function () {\n  var details = document.querySelectorAll('.staticcontent details');\n\n  details.forEach(function (detail) {\n    detail.addEventListener('toggle', function () {\n      if (!this.open) return;\n\n      details.forEach(function (other) {\n        if (other === detail) return;\n\n        var iframe = other.querySelector('iframe.yt_player_iframe');\n        if (iframe) {\n          var src = iframe.src;\n          iframe.src = '';\n          iframe.src = src;\n        }\n\n        other.open = false;\n      });\n    });\n  });\n})();"
+    },
+    {
+      "name": "Reviews injection script",
+      "type": "js",
+      "sub_type": "external",
+      "compatible_engines": [
+        "react"
+      ],
+      "position": "body-bottom",
+      "attributes": {
+        "defer": "defer"
+      },
+      "pages": [
+        {
+          "page_slug": "product",
+          "type": "system"
+        }
+      ],
+      "__source": {
+        "type": "extension",
+        "id": "68c26188a82aaa6d072c9c39"
+      },
+      "_id": "691480bf8e4be21e43bdd429",
+      "url": "https://reviews-ratings-widget.jio.com/jiomart/extension-react.umd.min.js"
+    },
+    {
+      "name": "Reviews injection style",
+      "type": "css",
+      "sub_type": "external",
+      "compatible_engines": [
+        "react"
+      ],
+      "position": "head",
+      "attributes": {
+        "rel": "stylesheet"
+      },
+      "pages": [
+        {
+          "page_slug": "product",
+          "type": "system"
+        }
+      ],
+      "__source": {
+        "type": "extension",
+        "id": "68c26188a82aaa6d072c9c39"
+      },
+      "_id": "691480c08e4be21e43bdd430",
+      "url": "https://reviews-ratings-widget.jio.com/jiomart/extension-react.css"
+    },
+    {
+      "name": "ReactExt",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "react"
+      ],
+      "position": "head",
+      "pages": [],
+      "_id": "6915771dbc96bb8783fba878",
+      "content": "const FPI_EXT_FUNC = () => { let events = {}; let unregisteredEmits = []; let id = 0; let HOOKS = { CREATED: 'created', MOUNTED: 'mounted', UPDATED: 'updated', DESTROYED: 'destroyed', WATCH_ROUTE: 'watch.route', }; return { _getSanitizedEH(eventHandlers) { const allHooks = Object.values(HOOKS); return Object.entries(eventHandlers).reduce((ret, [k, v]) => { if (k == 'watch') { ret[k] = v; } else if (!allHooks.includes(k)) { console.warn(`${k} is not a valid hook for FPI.extension.register#hooks`); } else if (typeof v !== 'function') { console.error(`${k} should be a function FPI.extension.register#${k}`); } else { ret[k] = v; } return ret; }, {}); }, emit: function (eventName, el, ...data) { const [hook, watcher] = eventName.split('.'); let callbackExists = false; Object.entries(events).forEach(([target, events]) => { const targetElement = (el instanceof Element && el.matches(target) && el) || el.querySelector(target); if (!targetElement) { return; } callbackExists = true; if (events[hook]) { if (watcher) { events[hook][watcher](targetElement, ...data); } else { events[hook](targetElement, ...data); } } }); if (!callbackExists) { unregisteredEmits = [...(unregisteredEmits || []), { eventName, el, data, },]; } }, register: function (target, eventHandlers) { const sanitizedEH = this._getSanitizedEH(eventHandlers); if (!events[target]) { events[target] = {} } events[target] = { ...sanitizedEH }; if (unregisteredEmits.length) { unregisteredEmits = unregisteredEmits.filter((state) => { const { eventName, el, data } = state; if (!!el.querySelector(target)) { this.emit(eventName, el, ...data); return false; } return true; }); } }, } }; window.FPI_EXT = FPI_EXT_FUNC();FPI_EXT.event = FPI.event;\n "
+    },
+    {
+      "name": "UCP Events",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "head",
+      "pages": [],
+      "_id": "693118d630e457674deafca8",
+      "content": "window.UCP_CUSTOM_EVENTS = ['cart.update','cart.newProduct','cart.remove','custom.view_item_plp','custom.view_item_plp_search_list','product_list.click','custom.click_recommendation','custom.banner_click','custom.sections_click','product.view'];\n\n!function(){var e=window.stelios=window.stelios||[];if(!e.initialize){if(e.invoked)window.console&&console.error&&console.error(\"Stelios snippet included twice.\");else{e.invoked=!0,e.methods=[\"track\",],e.factory=function(t){return function(){var i=Array.prototype.slice.call(arguments);return i.unshift(t),e.push(i),e}};for(var t=0;t<e.methods.length;t++){var i=e.methods[t];e[i]=e.factory(i)}e.load=function(i,o){var a=document.createElement(\"script\");a.type=\"text/javascript\",a.async=!0,a.onload=o,a.src=\"https://cdn.pixelbin.io/v2/autumn-band-3b0a0b/original/ucp-sdk/stelios/cctz0/stelios.min.js\";var r=document.getElementsByTagName(\"script\")[0];r.parentNode.insertBefore(a,r),e._loadOptions=t},e._writeKey=\"2f369baae32a9f689b53baa9d7a1e84ff8a7ca03fcd624b587f5ccad5f297db4\",e._cdn=\"https://api.cctz0.de/service/application/ccp-ingest/stream/v1.0\",e.SNIPPET_VERSION=\"4.15.3\",e.load(\"2f369baae32a9f689b53baa9d7a1e84ff8a7ca03fcd624b587f5ccad5f297db4\",function(){window.stelios=window.stelios.AnalyticsBrowser.load({writeKey:e._writeKey,cdnURL:\"https://api.cctz0.de/service/application/ccp-ingest/stream/v1.0\"},{initialPageview:false})})}}}();\n\nfunction UCP_JSON_Formatter(event= \"\", eventData={},type=\"\"){\n    let data = {};\n    if(eventData?.product){\n        data = eventData?.product ;\n    }\n    if((eventData?.products !== undefined && eventData?.products != null) && eventData?.products.length > 0) {\n        data = eventData?.products[0];\n    }\n    let extraData = eventData?.product_extra_data;\n    let userdata = {}; \n    let rrid = '';\n    let userid = '';\n    let userauth = '';\n    let productJson = {};\n    let cart_add_detail=[];\n    let l1_category = \"\";\n    let l2_category = \"\";\n    let l3_category = \"\";\n    let l4_category = \"\";\n    let l5_category = \"\";\n    let l1_id = \"\";\n    let l2_id = \"\";\n    let l3_id = \"\";\n    let l4_id = \"\";\n    let l5_id = \"\";\n    let cartid=0;\n    let cartinfo={};\n    let verticalCode = \"\";\n    let imageUrl = \"\";\n    let price = 0;\n    let dimension_data = {};\n    if(eventData?.cart_id){\n        cartid = eventData?.cart_id;\n    }\n    // if(action=='remove' && prodqty==0){\n    //   prodqty=1;\n    // }\n    if(window.FPI?.state?.user?._data){\n        userdata = window.FPI?.state?.user?._data?.user ? window.FPI?.state?.user?._data?.user : {}; \n        rrid= userdata.rr_id ? userdata.rr_id : '';\n        userid= userdata.user_id ? userdata.user_id : '';\n        userauth = localStorage.getItem('userauth') ? localStorage.getItem('userauth') : '';\n    }\n    // if(data != null && userdata != '' && rrid != '' && userid != '' && userauth != ''){\n        \n        let product_id = data?.uid ? data.uid.toString() : '';\n        if(data?.categories){\n            l1_category = ((data?.categories[0]?.name.split('::')).length > 0) ? ((data.categories[0].name.split('::')[0] != undefined && data.categories[0].name.split('::')[0] != null) ? data.categories[0].name.split('::')[0] : \"\"): \"\";\n            l2_category = ((data?.categories[0].name.split('::')).length > 0) ? ((data.categories[0].name.split('::')[1] != undefined && data.categories[0].name.split('::')[1] != null) ? data.categories[0].name.split('::')[1] : \"\"): \"\";\n            l3_category = ((data?.categories[0].name.split('::')).length > 1) ? ((data.categories[0].name.split('::')[2] != undefined && data.categories[0].name.split('::')[2] != null) ? data.categories[0].name.split('::')[2] : \"\"): \"\";\n            l4_category = ((data?.categories[0].name.split('::')).length > 2) ? ((data.categories[0].name.split('::')[3] != undefined && data.categories[0].name.split('::')[3] != null) ? data.categories[0].name.split('::')[3] : \"\"): \"\";\n            l5_category = ((data?.categories[0].name.split('::')).length > 3) ? ((data.categories[0].name.split('::')[4] != undefined && data.categories[0].name.split('::')[4] != null) ? data.categories[0].name.split('::')[4] : \"\"): \"\";\n        }\n        if(type == \"Product Viewed\") {\n            if(FPI?.state?.product?._data?.product){\n                if(FPI?.state?.product?._data?.product?.uid == product_id){\n                    if(FPI?.state?.product?._data?.product?.category_map){\n                        l2_id = ((FPI?.state?.product?._data?.product?.category_map?.l1 != undefined && FPI?.state?.product?._data?.product?.category_map?.l1 != null)) ? FPI?.state?.product?._data?.product?.category_map?.l1?.uid : \"\";\n                        l3_id = ((FPI?.state?.product?._data?.product?.category_map?.l2 != undefined && FPI?.state?.product?._data?.product?.category_map?.l2 != null)) ? FPI?.state?.product?._data?.product?.category_map?.l2?.uid : \"\";\n                        l4_id = ((FPI?.state?.product?._data?.product?.category_map?.l3 != undefined && FPI?.state?.product?._data?.product?.category_map?.l3 != null)) ? FPI?.state?.product?._data?.product?.category_map?.l3?.uid : \"\";\n                        l5_id = ((FPI?.state?.product?._data?.product?.category_map?.l4 != undefined && FPI?.state?.product?._data?.product?.category_map?.l4 != null)) ? FPI?.state?.product?._data?.product?.category_map?.l4?.uid : \"\";\n                    }\n                    if(FPI?.state?.product?._data?.product?.department){\n                        l1_id = FPI?.state?.product?._data?.product?.department?.uid;\n                    }\n                    if(FPI?.state?.product?._data?.product){\n                        if(FPI?.state?.product?._data?.product?.medias.length > 0){\n                            imageUrl = FPI?.state?.product?._data?.product?.medias[0].url || \"\";\n                        }\n                    }\n                }\n            }\n        }\n        if(data?.attributes?.multi_categories){\n            l1_id = data?.attributes?.multi_categories[0].department ? data.attributes.multi_categories[0].department.toString() : '';\n            l2_id = data?.attributes?.multi_categories[0].l1 ? data.attributes.multi_categories[0].l1.toString() : '';\n            l3_id = data?.attributes?.multi_categories[0].l2 ? data.attributes.multi_categories[0].l2.toString() : '';\n            l4_id = data?.attributes?.multi_categories[0].l3 ? data.attributes.multi_categories[0].l3.toString() : '';\n            l5_id = data?.attributes?.multi_categories[0].l4 ? data.attributes.multi_categories[0].l4.toString() : '';\n        }\n\n        if(data?.category && data?.category?.name){ // cart data\n            l1_category = ((data?.category?.name.split('::')).length > 0) ? ((data?.category?.name.split('::')[0] != undefined && data?.category?.name.split('::')[0] != null) ? data?.category?.name.split('::')[0] : \"\"): \"\";\n            l2_category = ((data?.category?.name.split('::')).length > 0) ? ((data?.category?.name.split('::')[1] != undefined && data?.category?.name.split('::')[1] != null) ? data?.category?.name.split('::')[1] : \"\"): \"\";\n            l3_category = ((data?.category.name.split('::')).length > 1) ? ((data?.category?.name.split('::')[2] != undefined && data?.category?.name.split('::')[2] != null) ? data?.category?.name.split('::')[2] : \"\"): \"\";\n            l4_category = ((data?.category.name.split('::')).length > 2) ? ((data?.category?.name.split('::')[3] != undefined && data?.category?.name.split('::')[3] != null) ? data?.category?.name.split('::')[3] : \"\"): \"\";\n            l5_category = ((data?.category.name.split('::')).length > 3) ? ((data?.category?.name.split('::')[4] != undefined && data?.category?.name.split('::')[4] != null) ? data?.category?.name.split('::')[4] : \"\"): \"\";\n        }\n\n        if(window.FPI?.state?.product?.selectedArticle?._data?.items.length > 0){\n            if(window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.attributes?.classification?.category.length > 0){\n                let categories = window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.attributes?.classification?.category;\n                if(categories !== undefined && categories != null){\n                    l1_category =  (categories.length > 1) ? (categories[1]?.name || \"\") : \"\";\n                    l2_category =  (categories.length > 2) ? (categories[2]?.name || \"\") : \"\";\n                    l3_category =  (categories.length > 3) ? (categories[3]?.name || \"\") : \"\";\n                    l4_category =  (categories.length > 4) ? (categories[4]?.name || \"\") : \"\";\n                    l5_category =  (categories.length > 5) ? (categories[5]?.name || \"\") : \"\";\n    \n                    l1_id = (categories.length > 1) ? (categories[1]?.source_id || \"\") : \"\";\n                    l2_id = (categories.length > 2) ? (categories[2]?.source_id || \"\") : \"\";\n                    l3_id = (categories.length > 3) ? (categories[3]?.source_id || \"\") : \"\";\n                    l4_id = (categories.length > 4) ? (categories[4]?.source_id || \"\") : \"\";\n                    l5_id = (categories.length > 5) ? (categories[5]?.source_id || \"\") : \"\";\n                }\n            }\n        }\n\n        let brand = (data.brand) ? data.brand.name : data.brand_name;\n        let brand_id = (data.brand.uid || '').toString();\n\n        let click_source = extraData?.click_source || '';\n\n        let sku_raw = data?.item_code ? data?.item_code.toString() : '';\n\n        let productName = data.name || '';\n        if(data?.price?.max){\n            price = Number(data?.price?.max.toFixed(2)) ; \n        }\n        if(data?.price?.effective){\n            if(data?.price?.effective?.max){\n                price = Number(data?.price?.effective?.max.toFixed(2)) ; \n            } else {\n                price = Number(data?.price?.effective.toFixed(2)) ; \n            }\n        }\n\n        if(data?.price_per_unit?.converted?.effective){\n            if(data?.price_per_unit?.converted?.effective?.max){\n                price = Number(data?.price_per_unit?.converted?.effective?.max.toFixed(2)) ; \n            } else {\n                price = Number(data?.price_per_unit?.converted?.effective.toFixed(2)) ; \n            }\n        }\n\n        let currencyCode = data?.price?.effective?.currency_code || \"INR\";\n\n        if(data?.price?.currency_code){\n            currencyCode = data?.price?.currency_code || \"INR\";\n        }\n\n        let productUrl = '/product/'+data.slug;\n        if(data?.source_url){\n            productUrl = data?.source_url;\n        }\n        if(data?.attributes){\n            verticalCode  = data?.attributes['vertical-code'] || '';\n        }\n\n        if(window.FPI?.state?.product?.selectedArticle?._data?.items.length > 0){\n            if(window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.vertical_code){\n                verticalCode = window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.vertical_code || \"\";\n            }\n        }\n        if(type == \"Product Viewed\") {\n            if(FPI?.state?.product?._data?.product){\n                if(FPI?.state?.product?._data?.product?.uid == product_id){\n                    if(FPI?.state?.product?._data?.product?.attributes){\n                        var fpi_attr_entries = Object.entries(FPI?.state?.product?._data?.product?.attributes);\n                        fpi_attr_entries.map(([fpi_attrIndex, fpi_attrItem] = attr_entry) => {\n                            if(fpi_attrIndex == \"vertical-code\"){\n                                verticalCode = fpi_attrItem;\n                            }\n                        });\n                    }\n                }\n            }\n        }\n        if((data?.medias != undefined && data?.medias != null) && data?.medias.length > 0){\n            imageUrl = data?.medias[0]['url'] ? data.medias[0]['url'] : '';\n        }\n        if(window.FPI?.state?.product?.selectedArticle?._data?.items.length > 0){\n            if(window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.attributes?.image_groups['Product Images']?.images.length > 0){\n                imageUrl = window.FPI?.state?.product?.selectedArticle?._data?.items[0]?._custom_json?.attributes?.image_groups['Product Images']?.images[0]?.original || \"\";\n            }\n        }\n\n        productJson = {\n            \"external_ids\":[\n                {\n                \"type\": \"rr_id\",\n                \"id\": rrid\n                }\n            ],\n            \"application_ids\":[\n                {\n                \"type\": \"jiomart_id\",\n                \"id\": userid\n                }\n            ],\n            \"meta\": {\n                \"session_id\": userauth\n                // \"widget_id\": \"\",\n                // \"widget_source_type\": listname+\"|mylist\"\n            },\n            \"click_source\": click_source,\n            \"product_id\": product_id,\n            \"product_name\": productName,\n            \"sku\": sku_raw,\n            \"l1_category\": l1_category,//productInfo?.categorylevel?.level1?.length > 0 ? productInfo.categorylevel.level1[0] : '',\n            \"l1_category_id\": l1_id,\n            \"l2_category\": l2_category,\n            \"l2_category_id\": l2_id,\n            \"l3_category\": l3_category,\n            \"l3_category_id\": l3_id,\n            \"l4_category\": l4_category,\n            \"l4_category_id\": l4_id,\n            \"l5_category\": l5_category,\n            \"l5_category_id\": l5_id,\n            \"brand\": brand,\n            \"brand_id\": brand_id,\n            \"quantity\": 1,\n            \"price\": price,\n            \"value\": price, // need to update Number(data.price.marked.max.toFixed(2))\n            \"currency\": currencyCode,\n            \"url\": productUrl,\n            \"verticalcode\": verticalCode,\n            \"img_url\": imageUrl //productInfo?.image?(productInfo.image):Configs.ANG_URL+\"/images/product/original/\"+productInfo.product_image_path\n        };\n        if(cartid){\n            productJson.cart_id = cartid;\n        }\n    // }\n    return productJson;\n}\nfunction steliosContext(eventtype=''){\n      let contextVar={};\n      /*let campaignObj = {};\n      campaignObj['name'] = this.cookieService.get('_rsCampaign') || '';\n      campaignObj['source'] = this.cookieService.get('_rsSource') || '';\n      campaignObj['medium'] = this.cookieService.get('_rsMedium') || '';\n      campaignObj['content'] = \"\";\n      if(localStorage.getItem(\"console_log_enable\") == \"1\"){\n          console.log(campaignObj);\n      }\n      if(campaignObj['name']!=''){\n        contextVar['campaign']=campaignObj;\n      }*/\n      contextVar['channel'] = 'web';\n      let device = (/android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini/i.test(navigator.userAgent.toLowerCase()));\n      if (localStorage.getItem('nms_refer_lite')) {\n        if((/iPad|iPhone|iPod/.test(window.navigator.userAgent))){\n          contextVar['channel'] = 'IOS';\n        }else{\n          contextVar['channel'] = 'Android';\n        }\n      }else if (device) {\n        contextVar['channel'] = 'msite';\n      }\n      if(localStorage.getItem('console_log_enable')==\"1\"){\n        console.log(\"Stelios - Context\",contextVar);\n      }\n      return contextVar;\n}"
+    },
+    {
+      "name": "JioAds GTM Event",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "body-bottom",
+      "pages": [],
+      "_id": "695e277b23e8753dc3cf7d92",
+      "content": "(() => {\n  \n  const customCONFIG = {\n    OBSERVER_ROOT_MARGIN: '50px 0px',\n    OBSERVER_THRESHOLD: [0.1, 0.5, 1.0],\n    PERIODIC_CHECK_INTERVAL: 1000,\n    PERIODIC_CHECK_MAX: 60,\n    HIGHLIGHT_DURATION: 2000,\n    BADGE_DURATION: 3000,\n    SLIDE_RECHECK_DEBOUNCE: 100\n  };\n  \n  \n  const customPAGE_TYPES = {\n    HOME: 'home',\n    PLP: 'product-listing',\n    COLLECTION: 'collection-listing',\n    PDP: 'product-description',\n    SEARCH: 'search',\n    CART: 'cart',\n    WISHLIST: 'wishlist',\n    SECTION: 'section',\n    OTHER: 'other'\n  };\n  \n  const customDetectPageType = () => {\n    const pathname = window.location.pathname;\n    const pageTitle = (document.title || '').toLowerCase();\n    const searchParams = new URLSearchParams(window.location.search);\n    \n    // Home page\n    if (pathname === '/' || pathname === '') {\n      return customPAGE_TYPES.HOME;\n    }\n    \n    // PDP - Product Description Page\n    if (pathname.includes('/product/') || pathname.match(/\\/p\\/[^\\/]+$/)) {\n      return customPAGE_TYPES.PDP;\n    }\n    \n    // Search page\n    if (searchParams.has('q') || pathname.includes('/search')) {\n      return customPAGE_TYPES.SEARCH;\n    }\n    \n    // Collection page\n    if (pathname.includes('/collection/') || pathname.includes('/c/')) {\n      return customPAGE_TYPES.COLLECTION;\n    }\n    \n    // PLP - Product Listing Page\n    if (pathname.includes('/products') || pathname.includes('/category/')) {\n      return customPAGE_TYPES.PLP;\n    }\n    \n    // Cart page\n    if (pathname.includes('/cart') || pageTitle.includes('cart')) {\n      return customPAGE_TYPES.CART;\n    }\n    \n    // Wishlist page\n    if (pathname.includes('/wishlist') || pageTitle.includes('wishlist')) {\n      return customPAGE_TYPES.WISHLIST;\n    }\n    \n    // Section page\n    if (pathname.includes('/section/') || pathname.includes('/sections/')) {\n      return customPAGE_TYPES.SECTION;\n    }\n    \n    return customPAGE_TYPES.OTHER;\n  };\n  \n  \n  const customState = {\n    pageType: customDetectPageType(),\n    trackedImpressions: new Set(),\n    trackedClicks: new Set(),\n    trackedAdspotIds: new Set(),\n    trackedEvents: [],\n    eventCounter: 0,\n    adElements: [],\n    observer: null,\n    intervalId: null,\n    startTime: Date.now()\n  };\n  \n  \n  \n  \n  \n  \n  const customExtractUvFromUrl = (url) => {\n    try {\n      const urlParams = new URL(url, window.location.origin).searchParams;\n      return urlParams.get('uv') || '';\n    } catch (e) {\n      const match = /[?&]uv=([^&]+)/.exec(url);\n      return match && match[1] ? match[1] : '';\n    }\n  };\n  \n  const customExtractAdCampaignId = (url) => {\n    const match = /adcampaignid=([^&]+)/.exec(url);\n    return match && match[1] ? match[1] : '';\n  };\n  \n  const customGetPageData = () => {\n    let pincode = '';\n    try { pincode = parseInt(localStorage.getItem('pincode')) || ''; } catch (e) {}\n    \n    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);\n    \n    // Get login status\n    let loginStatus = 'not logged in';\n    try {\n      const customerData = localStorage.getItem('customer_data');\n      if (customerData) {\n        const parsed = JSON.parse(customerData);\n        if (parsed && parsed.isLoggedIn) {\n          loginStatus = 'logged in';\n        }\n      }\n    } catch (e) {}\n    \n    return {\n      pincode,\n      pageType: customState.pageType,\n      platform: isMobile ? 'msite' : 'website',\n      loginStatus,\n      journey: localStorage.getItem('journey') || window.journeyData || ''\n    };\n  };\n  \n  \n  \n  const customAD_SELECTORS = {\n    // Common selectors for all pages\n    common: [\n      'ins[data-adspot-key]',\n      '[data-adspot-key]',\n      'iframe[id*=\"jioads\"]',\n      'iframe[src*=\"jioads\"]',\n      'iframe[src*=\"jioad\"]',\n      '.jioads-container',\n      '[class*=\"jioads\"]',\n      '[id*=\"jioads\"]'\n    ],\n    \n    // Page-specific selectors\n    [customPAGE_TYPES.HOME]: [\n      '[id*=\"home_ads\"]',\n      '[id*=\"homepage_ads\"]',\n      '[class*=\"hero-banner\"] ins',\n      '[class*=\"banner-carousel\"] ins',\n      '.hero-banner ins[data-adspot-key]',\n      '[class*=\"ads-banner\"]',\n      '[class*=\"sponsored\"]'\n    ],\n    \n    [customPAGE_TYPES.PLP]: [\n      '[id*=\"plp_ads\"]',\n      '[id*=\"listing_ads\"]',\n      '[class*=\"product-listing\"] ins[data-adspot-key]',\n      '[class*=\"sponsored-product\"]',\n      '.listing-ads-container',\n      '[id*=\"products_ads\"]'\n    ],\n    \n    [customPAGE_TYPES.COLLECTION]: [\n      '[id*=\"collection_ads\"]',\n      '[id*=\"clp_ads\"]',\n      '[class*=\"collection-listing\"] ins[data-adspot-key]',\n      '[class*=\"collection-banner\"] ins',\n      '.collection-ads-container'\n    ],\n    \n    [customPAGE_TYPES.PDP]: [\n      '[id*=\"pdp_ads_ds2\"]',\n      '[id*=\"pdp_ads\"]',\n      '[class*=\"product-description\"] ins[data-adspot-key]',\n      '[class*=\"pdp-ads\"]',\n      '.pdp-jioads-container',\n      '[class*=\"similar-products\"] ins[data-adspot-key]'\n    ],\n    \n    [customPAGE_TYPES.SEARCH]: [\n      '[id*=\"search_ads\"]',\n      '[id*=\"srp_ads\"]',\n      '[class*=\"search-results\"] ins[data-adspot-key]',\n      '.search-ads-container'\n    ],\n    \n    [customPAGE_TYPES.CART]: [\n      '[id*=\"cart_ads\"]',\n      '[class*=\"cart\"] ins[data-adspot-key]',\n      '.cart-ads-container'\n    ],\n    \n    [customPAGE_TYPES.OTHER]: []\n  };\n  \n  \n  \n  const customPushJioAdsGtmEvent = (type, campaignId, adspotId, slideIndex = null) => {\n    const d = customGetPageData();\n    \n    const eventData = {\n      event: 'event_jioads',\n      journey: d.journey,\n      category: 'jioads',\n      action: type === 'click' ? 'banner clicked' : 'banner impression',\n      label: type === 'click' ? 'jioads_banner_clicked' : 'jioads_banner_seen',\n      jioads_campaign_id: campaignId,\n      pincode: d.pincode,\n      page_type: d.pageType,\n      platform: d.platform,\n      login_status: d.loginStatus\n    };\n    \n    if (slideIndex !== null) {\n      eventData.slide_index = slideIndex;\n    }\n    \n    customState.eventCounter++;\n    customState.trackedEvents.push({ \n      id: customState.eventCounter, \n      timestamp: new Date().toISOString(),\n      elapsedMs: Date.now() - customState.startTime,\n      ...eventData \n    });\n    \n    // Push to dataLayer\n    window.dataLayer = window.dataLayer || [];\n    window.dataLayer.push(eventData);\n    \n    // Log to console\n    const icon = type === 'impression' ? '[IMP]' : '[CLK]';\n    \n    console.table({\n      'Event': eventData.event,\n      'Action': eventData.action,\n      'Campaign ID': campaignId,\n      'Adspot ID': adspotId,\n      'Page Type': eventData.page_type,\n      'Platform': eventData.platform,\n      'Slide Index': slideIndex !== null ? slideIndex : 'N/A'\n    });\n    \n    return eventData;\n  };\n  \n  \n  \n  const customIsInActiveSlide = (element) => {\n    // Check Swiper slides\n    const swiperSlide = element.closest('.swiper-slide');\n    if (swiperSlide) {\n      const isActive = swiperSlide.classList.contains('swiper-slide-active');\n      const isVisible = swiperSlide.classList.contains('swiper-slide-visible');\n      const isNext = swiperSlide.classList.contains('swiper-slide-next');\n      const isPrev = swiperSlide.classList.contains('swiper-slide-prev');\n      return isActive || isVisible || isNext || isPrev;\n    }\n    \n    // Check generic carousel patterns\n    const carouselItem = element.closest('[class*=\"carousel-item\"], [class*=\"slide\"], [class*=\"banner-item\"]');\n    if (carouselItem) {\n      const classList = Array.from(carouselItem.classList);\n      return classList.some(cls => \n        cls.includes('active') || cls.includes('visible') || cls.includes('current')\n      );\n    }\n    \n    return true; // Not in a carousel\n  };\n  \n  const customGetSlideIndex = (element) => {\n    const swiperSlide = element.closest('.swiper-slide');\n    if (swiperSlide) {\n      const swiper = swiperSlide.closest('.swiper');\n      if (swiper) {\n        const slides = swiper.querySelectorAll('.swiper-slide');\n        return Array.from(slides).indexOf(swiperSlide);\n      }\n    }\n    \n    const carouselItem = element.closest('[class*=\"carousel-item\"], [class*=\"slide\"], [class*=\"banner-item\"]');\n    if (carouselItem && carouselItem.parentElement) {\n      return Array.from(carouselItem.parentElement.children).indexOf(carouselItem);\n    }\n    \n    return -1;\n  };\n  \n  \n  \n  const customFindAllJioAdsElements = () => {\n    const elements = new Map(); // Use Map to dedupe by element\n    \n    // Get selectors for current page type + common selectors\n    const pageSelectors = customAD_SELECTORS[customState.pageType] || [];\n    const allSelectors = [...customAD_SELECTORS.common, ...pageSelectors];\n    \n    // Query all selectors\n    allSelectors.forEach(selector => {\n      try {\n        document.querySelectorAll(selector).forEach(el => {\n          if (!elements.has(el)) {\n            const adspotKey = el.getAttribute('data-adspot-key') || el.id || selector;\n            elements.set(el, {\n              element: el,\n              type: customGetElementType(el),\n              adspotKey: adspotKey,\n              id: el.id || '',\n              selector: selector,\n              pageType: customState.pageType\n            });\n          }\n        });\n      } catch (e) {\n        // Invalid selector, skip\n      }\n    });\n    \n    return Array.from(elements.values());\n  };\n  \n  const customGetElementType = (el) => {\n    if (el.tagName === 'INS') return 'ins';\n    if (el.tagName === 'IFRAME') return 'iframe';\n    if (el.id && el.id.includes('ads')) return 'container';\n    if (el.className && el.className.includes('jioads')) return 'jioads-container';\n    return 'element';\n  };\n  \n  \n  \n  const customCheckElementForImpressionUrls = (element) => {\n    const urls = [];\n    \n    // Check images in element\n    element.querySelectorAll('img').forEach(img => {\n      const src = img.src || img.getAttribute('src') || img.getAttribute('data-src') || '';\n      if (src.includes('ADSIMPRESSION') || src.includes('uv=')) {\n        urls.push({ type: 'image', src, element: img });\n      }\n    });\n    \n    // Check iframes\n    element.querySelectorAll('iframe').forEach(iframe => {\n      try {\n        const doc = iframe.contentDocument || iframe.contentWindow?.document;\n        if (doc) {\n          doc.querySelectorAll('img').forEach(img => {\n            const src = img.src || '';\n            if (src.includes('ADSIMPRESSION') || src.includes('uv=')) {\n              urls.push({ type: 'iframe-image', src, element: img });\n            }\n          });\n          \n          doc.querySelectorAll('a').forEach(a => {\n            const href = a.href || '';\n            if (href.includes('ADSIMPRESSION') || href.includes('adcampaignid=')) {\n              urls.push({ type: 'iframe-link', src: href, element: a });\n            }\n          });\n        }\n      } catch (e) {\n        // CORS restriction\n        urls.push({ type: 'iframe-cors', src: iframe.src, element: iframe });\n      }\n    });\n    \n    // Check links\n    element.querySelectorAll('a').forEach(a => {\n      const href = a.href || '';\n      if (href.includes('ADSIMPRESSION') || href.includes('adcampaignid=')) {\n        urls.push({ type: 'link', src: href, element: a });\n      }\n    });\n    \n    // Check for data attributes with URLs\n    const dataSrc = element.getAttribute('data-impression-url') || element.getAttribute('data-tracking-url');\n    if (dataSrc && (dataSrc.includes('ADSIMPRESSION') || dataSrc.includes('uv='))) {\n      urls.push({ type: 'data-attr', src: dataSrc, element: element });\n    }\n    \n    return urls;\n  };\n  \n  \n  \n  const customTrackImpression = (adInfo, impressionUrl) => {\n    const slideIndex = customGetSlideIndex(adInfo.element);\n    const key = adInfo.adspotKey + '_' + slideIndex + '_' + impressionUrl.src.substring(0, 50);\n    \n    if (customState.trackedImpressions.has(key)) {\n      return false;\n    }\n    \n    // Check if in active slide\n    if (!customIsInActiveSlide(adInfo.element)) {\n      return false;\n    }\n    \n    customState.trackedImpressions.add(key);\n    \n    // Extract campaign ID\n    var campaignId = customExtractUvFromUrl(impressionUrl.src);\n    if (!campaignId) {\n      campaignId = customExtractAdCampaignId(impressionUrl.src);\n    }\n    \n    if (campaignId) {\n      // Avoid duplicate events from same adspot ID\n      if (customState.trackedAdspotIds.has(adInfo.adspotKey)) {\n        return false;\n      }\n      customState.trackedAdspotIds.add(adInfo.adspotKey);\n      \n      customPushJioAdsGtmEvent('impression', campaignId, adInfo.adspotKey, slideIndex >= 0 ? slideIndex : null);\n      return true;\n    }\n    \n    return false;\n  };\n  \n  \n  \n  const customSetupClickTracking = () => {\n    document.addEventListener('click', function(e) {\n      var target = e.target;\n      var linkElement = null;\n      \n      if (target.tagName === 'A') {\n        linkElement = target;\n      } else {\n        linkElement = target.closest('a');\n      }\n      \n      if (linkElement && linkElement.href) {\n        var href = linkElement.href;\n        if (href.includes('adcampaignid=')) {\n          var campaignId = customExtractAdCampaignId(href);\n          if (campaignId && !customState.trackedClicks.has(campaignId)) {\n            customState.trackedClicks.add(campaignId);\n            \n            // Find adspot key from parent\n            var adContainer = linkElement.closest('[data-adspot-key]') || linkElement.closest('[id*=\"ads\"]');\n            var adspotKey = adContainer ? (adContainer.getAttribute('data-adspot-key') || adContainer.id) : 'unknown';\n            \n            // Avoid duplicate click events from same adspot ID\n            var clickKey = 'click_' + adspotKey;\n            if (customState.trackedAdspotIds.has(clickKey)) {\n              return;\n            }\n            customState.trackedAdspotIds.add(clickKey);\n            \n            customPushJioAdsGtmEvent('click', campaignId, adspotKey);\n          }\n        }\n      }\n    }, true);\n  };\n  \n  \n  \n  const customSetupViewportTracking = () => {\n    const observer = new IntersectionObserver((entries) => {\n      entries.forEach(entry => {\n        if (entry.isIntersecting && entry.intersectionRatio > 0.1) {\n          const adInfo = entry.target._customAdInfo;\n          if (!adInfo) return;\n          \n          \n          \n          const impressionUrls = customCheckElementForImpressionUrls(entry.target);\n          \n          if (impressionUrls.length > 0) {\n            impressionUrls.forEach(url => customTrackImpression(adInfo, url));\n          } else {\n            \n            if (!customState.trackedImpressions.has(adInfo.adspotKey)) {\n              customState.trackedImpressions.add(adInfo.adspotKey);\n            }\n          }\n        }\n      });\n    }, {\n      root: null,\n      rootMargin: customCONFIG.OBSERVER_ROOT_MARGIN,\n      threshold: customCONFIG.OBSERVER_THRESHOLD\n    });\n    \n    return observer;\n  };\n  \n  \n  \n  const customSetupSlideChangeListener = () => {\n    let recheckTimeout = null;\n    \n    const customRecheckAllImpressions = () => {\n      if (recheckTimeout) clearTimeout(recheckTimeout);\n      \n      recheckTimeout = setTimeout(() => {\n        customState.adElements.forEach(ad => {\n          const impressionUrls = customCheckElementForImpressionUrls(ad.element);\n          impressionUrls.forEach(url => customTrackImpression(ad, url));\n        });\n      }, customCONFIG.SLIDE_RECHECK_DEBOUNCE);\n    };\n    \n    // Listen for Swiper transition end\n    document.addEventListener('transitionend', (e) => {\n      const target = e.target;\n      if (target.classList?.contains('swiper-slide') || \n          target.closest?.('.swiper-slide') ||\n          target.closest?.('.swiper-wrapper')) {\n        customRecheckAllImpressions();\n      }\n    });\n    \n    // Custom events\n    ['slideChange', 'swiperSlideChange', 'carousel:change'].forEach(eventName => {\n      document.addEventListener(eventName, customRecheckAllImpressions);\n    });\n  };\n  \n  \n  \n  const customInit = () => {\n    // Find all JioAds elements\n    customState.adElements = customFindAllJioAdsElements();\n    \n    \n    \n    if (customState.adElements.length === 0) {\n      \n      \n    }\n    \n    // Log found elements grouped by type\n    const grouped = customState.adElements.reduce((acc, ad) => {\n      acc[ad.type] = acc[ad.type] || [];\n      acc[ad.type].push(ad);\n      return acc;\n    }, {});\n    \n    Object.entries(grouped).forEach(([type, ads]) => {\n      \n      ads.forEach((ad, i) => {\n        \n      });\n    });\n    \n    // Setup observer\n    customState.observer = customSetupViewportTracking();\n    \n    // Observe all ad elements\n    customState.adElements.forEach(ad => {\n      ad.element._customAdInfo = ad;\n      customState.observer.observe(ad.element);\n      \n      // Check immediately if in viewport\n      const rect = ad.element.getBoundingClientRect();\n      const isInViewport = (\n        rect.top >= -50 &&\n        rect.bottom <= window.innerHeight + 50\n      );\n      \n      if (isInViewport) {\n        const impressionUrls = customCheckElementForImpressionUrls(ad.element);\n        impressionUrls.forEach(url => customTrackImpression(ad, url));\n      }\n    });\n    \n    // Setup click tracking\n    customSetupClickTracking();\n    \n    // Setup slide change listener\n    customSetupSlideChangeListener();\n    \n    // Periodic re-check\n    let checkCount = 0;\n    customState.intervalId = setInterval(() => {\n      checkCount++;\n      \n      // Check existing ads\n      customState.adElements.forEach(ad => {\n        const rect = ad.element.getBoundingClientRect();\n        const isInViewport = (\n          rect.top >= -50 &&\n          rect.bottom <= window.innerHeight + 50\n        );\n        \n        if (isInViewport) {\n          const impressionUrls = customCheckElementForImpressionUrls(ad.element);\n          impressionUrls.forEach(url => customTrackImpression(ad, url));\n        }\n      });\n      \n      // Check for newly added ads\n      const newAds = customFindAllJioAdsElements();\n      newAds.forEach(ad => {\n        if (!ad.element._customAdInfo) {\n          ad.element._customAdInfo = ad;\n          customState.observer.observe(ad.element);\n          customState.adElements.push(ad);\n          \n        }\n      });\n      \n      if (checkCount >= customCONFIG.PERIODIC_CHECK_MAX) {\n        clearInterval(customState.intervalId);\n        \n      }\n    }, customCONFIG.PERIODIC_CHECK_INTERVAL);\n    \n    return customState;\n  };\n  \n  \n  \n  const customDebuggerInstance = customInit();\n  \n  window.customJioAdsDebugger = {\n    // Status and info\n    customStatus: function() {\n      console.table({\n        'Page Type': customState.pageType,\n        'Total Ads Found': customState.adElements.length,\n        'Impressions Tracked': customState.trackedImpressions.size,\n        'Clicks Tracked': customState.trackedClicks.size,\n        'Unique Adspots Fired': customState.trackedAdspotIds.size,\n        'GTM Events Fired': customState.eventCounter,\n        'Running Time': Math.round((Date.now() - customState.startTime) / 1000) + 's'\n      });\n    },\n    \n    // List all events\n    customEvents: () => {\n      if (customState.trackedEvents.length === 0) {\n        return;\n      }\n      \n      console.table(customState.trackedEvents.map(e => ({\n        '#': e.id,\n        'Type': e.action,\n        'Campaign ID': e.jioads_campaign_id,\n        'Adspot': e.adspot_id,\n        'Page': e.page_type,\n        'Time': `+${e.elapsedMs}ms`\n      })));\n    },\n    \n    // Rescan for new ads\n    customRescan: () => {\n      \n      const newAds = customFindAllJioAdsElements();\n      let addedCount = 0;\n      \n      newAds.forEach(ad => {\n        if (!ad.element._customAdInfo) {\n          ad.element._customAdInfo = ad;\n          customState.observer.observe(ad.element);\n          customState.adElements.push(ad);\n          addedCount++;\n        }\n      });\n      \n      \n    },\n    \n    // Check dataLayer\n    customCheckDataLayer: () => {\n      const jioAdsEvents = (window.dataLayer || []).filter(d => d?.event === 'event_jioads');\n      \n      \n      if (jioAdsEvents.length > 0) {\n        console.table(jioAdsEvents.map((e, i) => ({\n          '#': i + 1,\n          'Action': e.action,\n          'Campaign ID': e.jioads_campaign_id,\n          'Page Type': e.page_type,\n          'Adspot': e.adspot_id\n        })));\n      }\n    },\n    \n    // Force check all ads\n    customForceCheck: () => {\n      \n      customState.adElements.forEach(ad => {\n        const impressionUrls = customCheckElementForImpressionUrls(ad.element);\n        \n        impressionUrls.forEach(url => {\n          \n          customTrackImpression(ad, url);\n        });\n      });\n    },\n    \n    // Scroll to ads\n    customScrollToAds: () => {\n      const firstAd = customState.adElements[0]?.element;\n      if (firstAd) {\n        firstAd.scrollIntoView({ behavior: 'smooth', block: 'center' });\n      } else {\n        \n      }\n    },\n    \n    // List all ad elements\n    customListAds: () => {\n      \n      console.table(customState.adElements.map((ad, i) => ({\n        '#': i + 1,\n        'Type': ad.type,\n        'Adspot Key': ad.adspotKey,\n        'ID': ad.id || '-',\n        'Selector': ad.selector,\n        'Tracked': customState.trackedImpressions.has(ad.adspotKey) ? 'Yes' : '-'\n      })));\n    },\n    \n    // Get page type\n    customGetPageType: () => {\n      \n      return customState.pageType;\n    },\n    \n    // Reset tracking\n    customReset: function() {\n      customState.trackedImpressions.clear();\n      customState.trackedClicks.clear();\n      customState.trackedAdspotIds.clear();\n      customState.trackedEvents.length = 0;\n      customState.eventCounter = 0;\n      customState.startTime = Date.now();\n    },\n    \n    // Stop debugger\n    customStop: () => {\n      if (customState.intervalId) {\n        clearInterval(customState.intervalId);\n        customState.intervalId = null;\n      }\n      if (customState.observer) {\n        customState.observer.disconnect();\n      }\n      \n    },\n  };\n  \n})();"
+    },
+    {
+      "name": "Game injection script",
+      "type": "js",
+      "sub_type": "external",
+      "compatible_engines": [
+        "vue2"
+      ],
+      "position": "body-bottom",
+      "attributes": {
+        "defer": "defer"
+      },
+      "pages": [
+        {
+          "page_slug": "product",
+          "type": "system"
+        },
+        {
+          "page_slug": "home",
+          "type": "system"
+        }
+      ],
+      "__source": {
+        "type": "extension",
+        "id": "69afb428e2b589781577e4ec"
+      },
+      "_id": "69afbfde2bda6bc55f6ab4d1",
+      "url": "https://reviews-ratings-widget-sit.jio.com/game-hub/jiomart/game-vue.js"
+    },
+    {
+      "name": "Game injection style",
+      "type": "css",
+      "sub_type": "external",
+      "compatible_engines": [
+        "vue2"
+      ],
+      "position": "head",
+      "attributes": {
+        "defer": "defer"
+      },
+      "pages": [
+        {
+          "page_slug": "product",
+          "type": "system"
+        },
+        {
+          "page_slug": "home",
+          "type": "system"
+        }
+      ],
+      "__source": {
+        "type": "extension",
+        "id": "69afb428e2b589781577e4ec"
+      },
+      "_id": "69afbfde45541fb54abe9364",
+      "url": "https://reviews-ratings-widget-sit.jio.com/game-hub/jiomart/game-vue.css"
+    },
+    {
+      "name": "haptik-chatbot-script",
+      "type": "js",
+      "sub_type": "external",
+      "compatible_engines": [
+        "react",
+        "vue2"
+      ],
+      "position": "body-bottom",
+      "attributes": {
+        "defer": true
+      },
+      "pages": [],
+      "__source": {
+        "type": "extension",
+        "id": "68556a460c391c14ecc9e6aa"
+      },
+      "_id": "69e66b04f4cb2d181cbaf3ee",
+      "url": "https://cdn1.jiomartjcp.com/v2/jiomart-fynd/jio-pd/original/platform/extensions/haptik/free/original/u7v233N31-haptik-web.2.1.41.js?APP_SLUG=haptik"
+    },
+    {
+      "name": "How to buy on JioMart",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "head",
+      "pages": [
+        {
+          "page_slug": "page",
+          "type": "system"
+        }
+      ],
+      "_id": "69eeee671113c63cf3534650",
+      "content": "(function () {\n  var details = document.querySelectorAll('.staticcontent details');\n\n  details.forEach(function (detail) {\n    detail.addEventListener('toggle', function () {\n      if (!this.open) return;\n\n      details.forEach(function (other) {\n        if (other === detail) return;\n\n        var iframe = other.querySelector('iframe.yt_player_iframe');\n        if (iframe) {\n          // Reset src to stop the video\n          var src = iframe.src;\n          iframe.src = '';\n          iframe.src = src;\n        }\n      });\n    });\n  });\n})();"
+    },
+    {
+      "name": "Styles",
+      "type": "css",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "head",
+      "pages": [],
+      "_id": "69fd57140fc8ec22479026bf",
+      "content": "/*.footer__unlockCouponSection{display:none !important}*/\n"
+    },
+    {
+      "name": "Script",
+      "type": "js",
+      "sub_type": "inline",
+      "compatible_engines": [
+        "vue2",
+        "react"
+      ],
+      "position": "body-bottom",
+      "pages": [],
+      "_id": "6a0228da5ebc7c1517051216",
+      "content": "const replaceLinks = () => {\n  document\n    .querySelectorAll('a[href*=\"store1.jiomartjcp.com\"]')\n    .forEach((link) => {\n      link.href = link.href.replace(\n        /https:\\/\\/store1\\.jiomartjcp\\.com/g,\n        \"https://www.jiomart.com\"\n      );\n    });\n};\n\n// Initial run\nreplaceLinks();\n\n// Watch for dynamically added content\nconst observer = new MutationObserver(() => {\n  replaceLinks();\n});\n\nobserver.observe(document.body, {\n  childList: true,\n  subtree: true,\n});"
+    }
+  ],
+  "__v": 143
+}

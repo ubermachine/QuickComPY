@@ -7,14 +7,15 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import zendriver as zd
 
-from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto
+from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto, instamart
 
-SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto"]
+SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto", "instamart"]
 SCRAPERS = {
     "blinkit": blinkit,
     "bigbasket": bigbasket,
     "jiomart": jiomart,
     "zepto": zepto,
+    "instamart": instamart,
 }
 
 _STEALTH_JS = """

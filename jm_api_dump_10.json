@@ -1,0 +1,142 @@
+{
+  "items": [
+    {
+      "uid": 3442,
+      "code": "T6HZ",
+      "display_name": "Groceries-T6HZ",
+      "priority": 1,
+      "processing_time": 0,
+      "promise": {
+        "min": "2026-07-18T02:30:00Z",
+        "max": "2026-07-18T02:30:00Z"
+      },
+      "journey_wise_promise": [
+        {
+          "journey": "quickcommerce",
+          "meta": {
+            "zone": "west",
+            "mbv_config": [
+              {
+                "department": "Groceries",
+                "min_basket_value": 99
+              }
+            ],
+            "polygon_id": "T6HZ_QC_5475bdd9",
+            "distance": 820.3851
+          },
+          "delivery_promise": {
+            "min": "2026-07-18T02:30:00Z",
+            "max": "2026-07-18T02:30:00Z",
+            "message": "Delivery Before 8:00 AM"
+          }
+        }
+      ],
+      "seller_id": 1,
+      "address": {
+        "address2": "",
+        "pincode": "400001",
+        "city": "MUMBAI",
+        "country": "India",
+        "state": "MAHARASHTRA",
+        "country_code": "IN",
+        "latitude": 18.93182,
+        "longitude": 72.83307
+      },
+      "timings": {
+        "open": false,
+        "opening": {
+          "hour": 6,
+          "minute": 0
+        },
+        "closing": {
+          "hour": 23,
+          "minute": 0
+        }
+      },
+      "is_accepting_order": true,
+      "department_name": "Groceries",
+      "distance": 820.3851,
+      "store_logo_url": null,
+      "store_banner_url": null,
+      "store_banner_portrait_url": null
+    },
+    {
+      "uid": 259630,
+      "code": "TVC8",
+      "display_name": "TVC8-FASHION-QC",
+      "priority": 1,
+      "processing_time": 0,
+      "promise": {
+        "min": "2026-07-18T06:30:00Z",
+        "max": "2026-07-18T06:30:00Z"
+      },
+      "journey_wise_promise": [
+        {
+          "journey": "quickcommerce",
+          "meta": {
+            "zone": "west",
+            "mbv_config": [
+              {
+                "department": "Groceries",
+                "min_basket_value": 99
+              }
+            ],
+            "polygon_id": null,
+            "distance": 950.5817
+          },
+          "delivery_promise": {
+            "min": "2026-07-18T06:30:00Z",
+            "max": "2026-07-18T06:30:00Z",
+            "message": "Delivery Before 12:00 PM"
+          }
+        }
+      ],
+      "seller_id": 1,
+      "address": {
+        "address2": "",
+        "pincode": "400002",
+        "city": "MUMBAI",
+        "country": "India",
+        "state": "MAHARASHTRA",
+        "country_code": "IN",
+        "latitude": 18.944301,
+        "longitude": 72.829661
+      },
+      "timings": {
+        "open": false,
+        "opening": {
+          "hour": 10,
+          "minute": 0
+        },
+        "closing": {
+          "hour": 19,
+          "minute": 0
+        }
+      },
+      "is_accepting_order": true,
+      "department_name": "Fashion",
+      "distance": 950.5817,
+      "store_logo_url": null,
+      "store_banner_url": null,
+      "store_banner_portrait_url": null
+    }
+  ],
+  "promise": {
+    "min": "2026-07-18T02:30:00Z",
+    "max": "2026-07-18T02:30:00Z"
+  },
+  "query_params": {
+    "store_ids": [
+      "3442",
+      "259630"
+    ]
+  },
+  "page": {
+    "current": 1,
+    "has_previous": false,
+    "has_next": false,
+    "type": "number",
+    "size": 2,
+    "item_total": 2
+  }
+}

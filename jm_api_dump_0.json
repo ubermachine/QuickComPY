@@ -1,0 +1,14 @@
+{
+  "short_name": "JioMart: India's online shopping",
+  "name": "JioMart: India's online shopping",
+  "description": "",
+  "icons": [],
+  "id": "/",
+  "start_url": "/",
+  "background_color": "#ffffff",
+  "display": "standalone",
+  "scope": "/",
+  "theme_color": "#ffffff",
+  "shortcuts": [],
+  "screenshots": []
+}

@@ -1,0 +1,115 @@
+{
+  "cart_id": "None",
+  "uid": "None",
+  "coupon_text": "View all offers",
+  "id": "None",
+  "delivery_promise": {},
+  "comment": "",
+  "items": [],
+  "payment_selection_lock": {
+    "enabled": false,
+    "default_options": "cod",
+    "payment_identifier": "cod"
+  },
+  "delivery_charge_info": "",
+  "common_config": {
+    "delivery_charges_config": {
+      "enabled": false,
+      "charges": []
+    }
+  },
+  "coupon": {
+    "cashback_amount": 0.0,
+    "cashback_message_primary": "",
+    "cashback_message_secondary": "",
+    "coupon_code": "",
+    "coupon_description": "",
+    "coupon_id": null,
+    "coupon_subtitle": "",
+    "coupon_title": "",
+    "coupon_type": "cart",
+    "coupon_value": 0.0,
+    "discount": 0.0,
+    "is_applied": false,
+    "is_valid": false,
+    "maximum_discount_value": 0.0,
+    "message": "",
+    "minimum_cart_value": 0.0,
+    "medias": [],
+    "mrp_coupon": false
+  },
+  "restrict_checkout": false,
+  "message": "No items in cart",
+  "notification": {},
+  "success": false,
+  "breakup_values": {
+    "coupon": {
+      "title": "",
+      "value": 0.0,
+      "is_applied": false,
+      "uid": null,
+      "coupon_type": "cart",
+      "sub_title": "",
+      "coupon_value": 0.0,
+      "code": "",
+      "type": "cash",
+      "minimum_cart_value": 0.0,
+      "message": "",
+      "description": ""
+    },
+    "display": [],
+    "loyalty_points": {
+      "is_applied": null,
+      "total": null,
+      "applicable": null,
+      "description": null,
+      "message": null
+    },
+    "raw": {
+      "promotion": 0.0,
+      "coupon": 0.0,
+      "gst_charges": 0.0,
+      "mrp_total": 0.0,
+      "fynd_cash": 0.0,
+      "vog": 0.0,
+      "gift_card": 0.0,
+      "cod_charge": 0.0,
+      "total": 0.0,
+      "discount": 0.0,
+      "delivery_charge": 0.0,
+      "you_saved": 0.0,
+      "subtotal": 0.0,
+      "sub_total": 0.0,
+      "convenience_fee": 0.0,
+      "total_charge": 0.0,
+      "mop_total": 0.0
+    }
+  },
+  "is_valid": false,
+  "currency": {
+    "code": "INR",
+    "symbol": "\u20b9"
+  },
+  "checkout_mode": "self",
+  "last_modified": "Fri, 17 Jul 2026 18:50:53 GMT",
+  "price_adjustment_applied": [],
+  "buy_now": false,
+  "gstin": null,
+  "applied_promo_details": [],
+  "eligible_fixed_price_promotions": {},
+  "pan_no": null,
+  "custom_cart": {
+    "id": "685945f57b6db137e2d6c45a",
+    "cart_name": "Universal",
+    "cart_type": "universal",
+    "is_universal": true
+  },
+  "is_pan_received": false,
+  "pan_config": {
+    "online_threshold_amount": 200000.0,
+    "cod_threshold_amount": 200000.0,
+    "enabled": true
+  },
+  "custom_cart_meta": {},
+  "error_code": null
+}
