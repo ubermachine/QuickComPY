@@ -1,78 +1,74 @@
 # QuickCom Scraper
 
-QuickCom is a web application that helps you find and compare product prices across Blinkit, Bigbasket, JioMart, and Zepto. Instead of checking each app individually, you can search once and see all the options, saving you time and money when ordering groceries or essentials.
+QuickCom is a highly optimized, asynchronous web application that aggregates product prices across **Blinkit, BigBasket, JioMart, Zepto, and Swiggy Instamart**. It allows you to search across all five major Indian quick commerce platforms simultaneously to compare prices, discounts, and delivery times in a single unified interface.
 
 ## Supported Platforms
 
-| Platform | Status |
-|----------|--------|
-| ✅ Blinkit | Working — 24+ products with complete data (prices, discounts, quantities) |
-| ✅ Bigbasket | Working — CDP stealth injection bypasses Akamai detection |
-| ✅ JioMart | Working — 50+ products with complete data |
-| ✅ Zepto | Working — CDP stealth injection bypasses bot detection |
-| ❌ Instamart (Swiggy) | Blocked by AWS WAF challenge.js — requires Go awswaf solver |
-
-## Demo
-
-![Location and Search Interface](./screenshots/quickcom-search-interface.png)
-![Product Results](./screenshots/quickcom-results.png)
+| Platform | Status | Extraction Method |
+|----------|--------|-------------------|
+| ✅ **Blinkit** | Working | API Interception (`/v6/search/products`) |
+| ✅ **Swiggy Instamart**| Working | API Interception (`/api/instamart/search/v2`) |
+| ✅ **Zepto** | Working | API Interception (`/api/v3/search`) |
+| ✅ **BigBasket** | Working | HTML Parsing (`bb-product-card`) |
+| ✅ **JioMart** | Working | HTML Parsing (`aisle-product-card`) |
 
 ## Features
 
-- **Multi-platform Search**: Find products across 4 platforms with one search
-- **Location-based Results**: Set your location once to get accurate delivery options
-- **Real-time Comparison**: See prices and delivery times side by side
-- **Visual Indicators**: Easily spot discounts and best deals
-- **Responsive Design**: Works well on both desktop and mobile
-- **Live Updates**: Results appear as they're found
-- **Complete Product Info**: See quantity, price, discounts, and delivery times
-- **Stealth Anti-Detection**: CDP-level stealth injection bypasses Akamai and bot detection
+- **Multi-platform Search**: Find products across 5 platforms with one search.
+- **Location-based Results**: Initialize your location using Pincodes or City names to get accurate, localized delivery options.
+- **Bypass WAFs & Bot Detection**: Uses Zendriver with stealth CDP injection to bypass Akamai and AWS WAF challenges natively. API interception completely bypasses HTML scraping traps.
+- **Asynchronous & Concurrent**: Uses `asyncio.gather()` to fetch data from all 5 platforms simultaneously within 10-15 seconds.
+- **Memory Optimized**: Runs a single global Chromium browser instance via FastAPI Lifespan events. Memory footprint fits within a 512MB RAM constraint for free-tier deployments.
+- **Modern Glassmorphism UI**: Beautiful, responsive Vanilla HTML/CSS interface with visual badges and dynamic grid layouts.
 
 ## Technology Stack
 
 ### Backend
-- **Python 3.14** — Programming language
-- **Zendriver** — Browser automation with CDP stealth injection
-- **Playwright** — Web automation engine (underlying Zendriver)
+- **Python 3.11+**
+- **FastAPI** — High-performance async API framework
+- **Uvicorn** — ASGI web server
+- **Zendriver** — Headless browser automation (Playwright wrapper) with advanced stealth
 
 ### Frontend
-- **Streamlit** — UI framework
-- **websocket-client** — Communication library
+- **Vanilla HTML/CSS/JS** — Lightweight, no-build-step frontend
+- **Inter Font & Custom Gradients** — Premium UI feel
+
+### Deployment
+- **Docker** — Optimized `python:3.11-slim` multi-stage image.
+- **Render / Google Cloud Run** — Configuration files included for easy serverless deployment.
 
 ## Project Structure
 
 ```
 QuickCom/
-├── backend_py/                # Python backend
-│   ├── scrapers/              # Individual store scrapers
-│   │   ├── blinkit.py         # Blinkit scraper (CDP API interception)
-│   │   ├── bigbasket.py       # Bigbasket scraper (cookie location + DOM extraction)
-│   │   ├── jiomart.py         # JioMart scraper (HTML extraction)
-│   │   └── zepto.py           # Zepto scraper (data-slot-id extraction)
-│   ├── awswaf/                # AWS WAF challenge solver (for future use)
-│   │   ├── aws.py             # WAF solver main class
-│   │   ├── verify.py          # Challenge verification (sha256, scrypt, network_bandwidth)
-│   │   ├── fingerprint.py     # Browser fingerprint generation
-│   │   └── crypto.py          # Encryption utilities
-│   └── __init__.py
-├── streamlit/                 # Streamlit Frontend
-│   └── app.py                 # Main UI application
+├── backend_py/                # Backend logic
+│   └── scrapers/              # Individual store scrapers
+│       ├── blinkit.py         
+│       ├── bigbasket.py       
+│       ├── jiomart.py         
+│       ├── zepto.py           
+│       └── instamart.py       
+├── static/                    # Frontend assets
+│   └── index.html             # Main Single Page Application
+├── main.py                    # FastAPI server & routes
+├── Dockerfile                 # Optimized slim Docker image
+├── render.yaml                # Render Blueprint deployment config
 ├── requirements.txt           # Python Dependencies
-└── README.md                  # This documentation
+└── README.md                  # Documentation
 ```
 
-## Installation
+## Installation & Setup
 
 ### Prerequisites
-- Python 3.14+
-- Chrome/Chromium browser (for Zendriver automation)
+- Python 3.11 or higher
+- Google Chrome or Chromium installed on your system
 
-### Setup
+### Local Development
 
 1. **Clone the Repository:**
 ```shell
-git clone https://github.com/yourusername/QuickCom.git
-cd QuickCom
+git clone https://github.com/ubermachine/QuickComPY.git
+cd QuickComPY
 ```
 
 2. **Install Dependencies:**
@@ -81,42 +77,34 @@ pip install -r requirements.txt
 playwright install chromium
 ```
 
-### Running the Application
-
+3. **Run the Server:**
 ```shell
-streamlit run streamlit/app.py
+python main.py
 ```
-The frontend will run on `http://localhost:8501`
+*Note: The app runs via Uvicorn programmatically on `http://localhost:8000`.*
 
-## How It Works
+## Deployment
 
-Each scraper uses **Zendriver** (a modern headless browser automation library) to:
-1. Set location via CDP cookie injection (no UI interaction needed for most sites)
-2. Navigate to the search page
-3. Extract product data from the rendered DOM or intercepted API responses
-4. Structure and return product information
+The application is heavily optimized for low-memory environments (like Render's Free Tier or Google Cloud Run).
 
-### Anti-Detection
+### Google Cloud Run
+You can easily deploy this container to Google Cloud Run:
+```shell
+gcloud run deploy quickcom \
+  --source . \
+  --allow-unauthenticated \
+  --memory 1Gi \
+  --region us-central1
+```
 
-The app uses **CDP-level stealth injection** via `Page.addScriptToEvaluateOnNewDocument` to:
-- Hide `navigator.webdriver` flag
-- Spoof `navigator.plugins` and `navigator.languages`
-- Set realistic `navigator.hardwareConcurrency`
-- Configure custom user agent and WebRTC disabling
+### Render
+The repository includes a `render.yaml` Blueprint. Simply connect your GitHub repository to Render and it will automatically provision the Docker-based Web Service using the specified port and commands.
 
-This bypasses Akamai and standard bot detection systems used by Bigbasket and Zepto.
+## Architecture Highlights
 
-### AWS WAF Solver
-
-The `backend_py/awswaf/` module can solve AWS WAF challenges programmatically:
-- Supports sha256 proof-of-work, scrypt, and network_bandwidth challenge types
-- Generates valid `aws-waf-token` values
-- Token authentication requires the Go `tls-client` library for perfect TLS fingerprinting
+- **API Interception > HTML Scraping**: Platforms like Swiggy and Zepto heavily obfuscate their HTML and use AWS WAF. QuickCom attaches `page.on('response')` CDP listeners to intercept the clean JSON payloads from internal APIs, bypassing DOM instability.
+- **Single Browser Instance**: Instead of opening and closing browsers per request, `main.py` initializes a single global Zendriver instance that lives for the lifetime of the FastAPI app, drastically reducing latency and memory overhead.
+- **Stealth Initialization**: Locations are injected directly into `localStorage`, `sessionStorage`, and CDP Cookies via headless scripts, avoiding fragile UI interactions like clicking "Change Location" modals.
 
 ## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-Happy shopping and happy scraping! 🚀
+MIT License
