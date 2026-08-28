@@ -4,7 +4,10 @@ import threading
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+import pytest
 import zendriver as zd
+
+from backend_py.scrapers import common
 from backend_py.scrapers.zepto import set_location, search
 
 _STEALTH_JS = """
@@ -67,15 +70,30 @@ async def do_test(browser):
     await page1.close()
 
     page2 = await stealth_new_page(browser)
-    products = await search(page2, "eggs")
-    assert len(products) > 0, "No products found! The API interception might have failed."
+    result = await search(page2, "eggs")
     await page2.close()
-    return products
+
+    # A block is the platform's decision, not a code defect -- fail loudly on a
+    # broken interception, but skip rather than red-flag a bot challenge.
+    if result.status == common.BLOCKED:
+        pytest.skip(f"Zepto blocked this run: {result.message}")
+    assert result.status == common.OK, f"Unexpected status {result.status}: {result.message}"
+    assert result.products, "No products found! The API interception might have failed."
+    return result.products
 
 def test_zepto_in_background_thread():
     browser, loop = get_browser_and_loop()
-    products = run_async_task(do_test(browser), loop)
-    print(f"Test passed! Found {len(products)} products.")
+    try:
+        products = run_async_task(do_test(browser), loop)
+        print(f"Test passed! Found {len(products)} products.")
+    finally:
+        # The loop runs forever on a daemon thread; without this, pytest hangs
+        # at exit waiting for it.
+        try:
+            run_async_task(browser.stop(), loop)
+        except Exception:
+            pass
+        loop.call_soon_threadsafe(loop.stop)
 
 if __name__ == "__main__":
     test_zepto_in_background_thread()

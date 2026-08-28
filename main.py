@@ -1,22 +1,22 @@
-import os
 import asyncio
+import os
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from pydantic import BaseModel
+
 import zendriver as zd
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from backend_py.scrapers import blinkit, bigbasket, jiomart, zepto, instamart
+from backend_py.registry import BY_KEY, KEYS, PLATFORMS
+from backend_py.scrapers import common
 
-SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto", "instamart"]
-SCRAPERS = {
-    "blinkit": blinkit,
-    "bigbasket": bigbasket,
-    "jiomart": jiomart,
-    "zepto": zepto,
-    "instamart": instamart,
-}
+# Each platform needs its own tab, and each tab is real Chromium memory. Five
+# at once fits a 512MB box; the cap keeps that true as platforms are added.
+MAX_CONCURRENT_TABS = int(os.environ.get("MAX_CONCURRENT_TABS", "4"))
+
+SEARCH_TIMEOUT = float(os.environ.get("SEARCH_TIMEOUT", "60"))
+LOCATION_TIMEOUT = float(os.environ.get("LOCATION_TIMEOUT", "25"))
 
 _STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -26,56 +26,92 @@ window.chrome = { runtime: {} };
 Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
 """
 
+
 async def stealth_new_page(browser):
     page = await browser.get('about:blank', new_tab=True)
     await page.send(zd.cdp.page.add_script_to_evaluate_on_new_document(source=_STEALTH_JS))
     return page
 
+
 def robust_close(page, loop):
+    """Close a tab without blocking the response on it.
+
+    The task is parked on the loop so it is not garbage collected mid-flight,
+    which would leak the tab.
+    """
     async def _close():
         try:
             await page.close()
         except Exception as e:
             print(f"Error closing page: {e}")
+
     t = asyncio.create_task(_close())
     if not hasattr(loop, 'cleanup_tasks'):
         loop.cleanup_tasks = set()
     loop.cleanup_tasks.add(t)
     t.add_done_callback(loop.cleanup_tasks.discard)
 
-async def set_loc_svc(browser, svc, location):
-    print(f"Setting location for {svc} to {location}")
-    page = None
-    try:
-        page = await stealth_new_page(browser)
-        success = await asyncio.wait_for(SCRAPERS[svc].set_location(page, location), timeout=15.0)
-        return svc, success
-    except Exception as e:
-        print(f"Location error {svc}: {type(e).__name__} - {e}")
-        return svc, False
-    finally:
-        if page:
-            robust_close(page, asyncio.get_running_loop())
 
-async def search_svc(browser, svc, search_term):
-    print(f"Searching {svc} for {search_term}")
-    page = None
-    try:
-        page = await stealth_new_page(browser)
-        products = await asyncio.wait_for(SCRAPERS[svc].search(page, search_term), timeout=45.0)
-        return svc, products
-    except Exception as e:
-        print(f"Search error {svc}: {type(e).__name__} - {e}")
-        return svc, []
-    finally:
-        if page:
-            robust_close(page, asyncio.get_running_loop())
+async def set_loc_svc(browser, key, location, sem):
+    async with sem:
+        print(f"Setting location for {key} to {location}")
+        page = None
+        try:
+            page = await stealth_new_page(browser)
+            ok = await asyncio.wait_for(
+                BY_KEY[key].module.set_location(page, location), timeout=LOCATION_TIMEOUT
+            )
+            return key, bool(ok)
+        except Exception as e:
+            print(f"Location error {key}: {type(e).__name__} - {e}")
+            return key, False
+        finally:
+            if page:
+                robust_close(page, asyncio.get_running_loop())
+
+
+async def search_svc(browser, key, search_term, sem):
+    """Search one platform, always returning a structured result.
+
+    Never raises: a platform that is blocked or slow degrades to a status the
+    frontend can explain, rather than an empty column indistinguishable from
+    "this product does not exist here".
+    """
+    async with sem:
+        print(f"Searching {key} for {search_term}")
+        page = None
+        try:
+            page = await stealth_new_page(browser)
+            result = await asyncio.wait_for(
+                BY_KEY[key].module.search(page, search_term), timeout=SEARCH_TIMEOUT
+            )
+            if isinstance(result, common.ScrapeResult):
+                return key, result
+            # Tolerate a scraper that still returns a bare list.
+            products = list(result or [])
+            return key, common.ScrapeResult(
+                products, common.OK if products else common.EMPTY
+            )
+        except asyncio.TimeoutError:
+            print(f"Search timeout {key}")
+            return key, common.ScrapeResult(
+                [], common.TIMEOUT, f"{BY_KEY[key].label} took too long to respond."
+            )
+        except Exception as e:
+            print(f"Search error {key}: {type(e).__name__} - {e}")
+            return key, common.ScrapeResult(
+                [], common.ERROR, f"{type(e).__name__}: {e}"
+            )
+        finally:
+            if page:
+                robust_close(page, asyncio.get_running_loop())
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     print("Starting global Zendriver browser...")
     stealth_config = zd.Config(
-        sandbox=False, # Required for Docker/Render
+        sandbox=False,  # Required for Docker/Render
         headless=True,
         browser_args=[
             "--disable-gpu",
@@ -95,63 +131,74 @@ async def lifespan(app: FastAPI):
     )
     browser = await zd.start(config=stealth_config)
     app.state.browser = browser
-    print("Browser started successfully!")
-    
+    app.state.sem = asyncio.Semaphore(MAX_CONCURRENT_TABS)
+    print(f"Browser started successfully! (max {MAX_CONCURRENT_TABS} concurrent tabs)")
+
     yield
-    
+
     print("Stopping browser...")
     await browser.stop()
 
+
 app = FastAPI(lifespan=lifespan)
 
-# Mount static files correctly
 os.makedirs("static", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 class LocationRequest(BaseModel):
     location: str
+
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
 
+
 @app.get("/")
 async def index():
     return FileResponse("static/index.html")
 
+
+@app.get("/api/services")
+async def services():
+    """Platform list and branding, so the frontend has no hardcoded copy."""
+    return {"services": [p.to_dict() for p in PLATFORMS]}
+
+
 @app.post("/api/set-location")
 async def set_location(body: LocationRequest):
-    browser = app.state.browser
+    sem = app.state.sem
     results = await asyncio.gather(*[
-        set_loc_svc(browser, svc, body.location) for svc in SERVICES
+        set_loc_svc(app.state.browser, key, body.location, sem) for key in KEYS
     ], return_exceptions=True)
-    
-    results_dict = {}
-    for i, svc in enumerate(SERVICES):
-        res = results[i]
+
+    out = {}
+    for key, res in zip(KEYS, results):
         if isinstance(res, Exception):
-            print(f"Service {svc} failed with exception: {res}")
-            results_dict[svc] = False
+            print(f"Service {key} failed with exception: {res}")
+            out[key] = False
         else:
-            results_dict[svc] = res[1]
-    return results_dict
+            out[key] = res[1]
+    return out
+
 
 @app.get("/api/search")
 async def search(q: str):
-    browser = app.state.browser
+    sem = app.state.sem
     results = await asyncio.gather(*[
-        search_svc(browser, svc, q) for svc in SERVICES
+        search_svc(app.state.browser, key, q, sem) for key in KEYS
     ], return_exceptions=True)
-    
-    results_dict = {}
-    for i, svc in enumerate(SERVICES):
-        res = results[i]
+
+    out = {}
+    for key, res in zip(KEYS, results):
         if isinstance(res, Exception):
-            print(f"Service {svc} failed with exception: {res}")
-            results_dict[svc] = []
+            print(f"Service {key} failed with exception: {res}")
+            out[key] = common.ScrapeResult([], common.ERROR, str(res)).to_dict()
         else:
-            results_dict[svc] = res[1]
-    return results_dict
+            out[key] = res[1].to_dict()
+    return out
+
 
 if __name__ == "__main__":
     import uvicorn

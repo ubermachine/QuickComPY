@@ -3,6 +3,8 @@ import asyncio
 import time
 import zendriver as zd
 
+from . import common
+
 # Module-level pincode store set by set_location(), read by search()
 _pincode = None
 _lat = None
@@ -123,139 +125,92 @@ async def set_location(page, location):
         print(f"[Zepto] Location injection error: {e}")
     return False
 
-async def search(page, search_term):
-    global _pincode, _lat, _lon
-    encoded = urllib.parse.quote(search_term)
-    print(f"[Zepto] Searching for: {search_term}")
-    
-    pincode = _pincode or '201301'
-    lat = _lat or '28.5821195'
-    lon = _lon or '77.3266991'
-    
-    collected_products = []
-    resolved = {"done": False}
-
-    target_requests = set()
-
-    async def handle_response(event: zd.cdp.network.ResponseReceived):
-        if resolved["done"]: return
-        if "api/v3/search" not in event.response.url or "filters" in event.response.url: return
-        print(f"[Zepto DEBUG] Intercepted URL (response headers): {event.response.url}")
-        target_requests.add(event.request_id)
-
-    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
-        if resolved["done"]: return
-        if event.request_id not in target_requests: return
-        
-        print(f"[Zepto DEBUG] Loading finished for request: {event.request_id}")
-        try:
-            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
-            if body_info:
-                import json
-                json_data = json.loads(body_info[0])
-                if json_data and "layout" in json_data:
-                    for widget in json_data.get("layout", []):
-                        if widget.get("widgetId") == "PRODUCT_GRID":
-                            items = widget.get("data", {}).get("resolver", {}).get("data", {}).get("items", [])
-                            collected_products.extend(items)
-                    
-                    if collected_products:
-                        print(f"[Zepto DEBUG] Found {len(collected_products)} products via API.")
-                        resolved["done"] = True
-                else:
-                    print("[Zepto DEBUG] No layout in JSON.")
-        except Exception as e:
-            print(f"[Zepto DEBUG] Error in handle_loading_finished: {e}")
-            # Remove failed request so we don't block; next matching response will be tried
-            target_requests.discard(event.request_id)
-
-    try:
-        await page.send(zd.cdp.network.enable())
-        # Establish domain session and set cookies BEFORE adding handlers
-        await page.get("https://www.zepto.com/")
-        await asyncio.sleep(1.5)
-        
-        # Set location cookies
-        await page.send(zd.cdp.network.set_cookie(name='latitude', value=lat, domain='.zepto.com', path='/', secure=True))
-        await page.send(zd.cdp.network.set_cookie(name='longitude', value=lon, domain='.zepto.com', path='/', secure=True))
-        await page.send(zd.cdp.network.set_cookie(name='location', value=pincode, domain='.zepto.com', path='/', secure=True))
-    except Exception:
-        pass
-
-    # Add handlers AFTER homepage load so we only capture the actual search API response
-    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
-    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
-    
-    try:
-        # Navigate to search URL
-        await page.get(f"https://www.zepto.com/search?query={encoded}")
-    except Exception:
-        pass
-
-    # Wait for API to fire
-    for _ in range(120): # 12 seconds max
-        if resolved["done"]: break
-        await asyncio.sleep(0.1)
-
-    page.remove_handlers(zd.cdp.network.ResponseReceived)
-    page.remove_handlers(zd.cdp.network.LoadingFinished)
-
-    if not collected_products:
-        print("[Zepto] No products found via API interception.")
-        return []
-
-    return extract_products(collected_products)
 
 def extract_products(items):
     products = []
     for item in items:
         try:
             prod_resp = item.get("productResponse")
-            if not prod_resp: continue
-            
-            product = prod_resp.get("product", {})
-            variant = prod_resp.get("productVariant", {})
-            
-            pid = prod_resp.get("id") or product.get("id") or "Unknown"
-            name = product.get("name", "Unknown")
-            
-            sp_paise = prod_resp.get("sellingPrice") or prod_resp.get("discountedSellingPrice") or 0
-            mrp_paise = prod_resp.get("mrp") or sp_paise
-            
-            price = f"₹{sp_paise / 100:.2f}".rstrip('0').rstrip('.') if sp_paise else "N/A"
-            orig_price = f"₹{mrp_paise / 100:.2f}".rstrip('0').rstrip('.') if mrp_paise else None
-            
-            savings = None
-            discount = None
-            if mrp_paise > sp_paise and sp_paise > 0:
-                savings = f"₹{(mrp_paise - sp_paise) / 100:.2f}".rstrip('0').rstrip('.')
-                discount = f"{int(round(((mrp_paise - sp_paise) / mrp_paise) * 100))}% OFF"
-            
-            quantity = variant.get("formattedPacksize", "1 item")
-            
-            images = variant.get("images", [])
+            if not prod_resp:
+                continue
+
+            product = prod_resp.get("product") or {}
+            variant = prod_resp.get("productVariant") or {}
+
+            name = common.clean(product.get("name"))
+            if not name:
+                continue
+
+            # Zepto quotes money in paise. discountedSellingPrice is what is
+            # actually charged when a promo is live, so it wins over sellingPrice.
+            sp_paise = prod_resp.get("discountedSellingPrice") or prod_resp.get("sellingPrice") or 0
+            mrp_paise = prod_resp.get("mrp") or 0
+            price, orig_price, savings, discount = common.price_fields(
+                sp_paise / 100 if sp_paise else None,
+                mrp_paise / 100 if mrp_paise else None,
+            )
+
             image_url = ""
+            images = variant.get("images") or []
             if images:
-                image_path = images[0].get("path", "")
-                if image_path:
-                    image_url = f"https://cdn.zeptonow.com/{image_path}"
-                    
-            available = not prod_resp.get("outOfStock", False)
-            
+                path = images[0].get("path", "")
+                if path:
+                    image_url = f"https://cdn.zeptonow.com/{path}"
+
             products.append({
-                "id": pid,
+                "id": f"zp_{prod_resp.get('id') or product.get('id') or name}",
                 "name": name,
                 "price": price,
-                "originalPrice": orig_price if orig_price != price else None,
+                "originalPrice": orig_price,
                 "savings": savings,
-                "quantity": quantity,
+                "quantity": common.clean(variant.get("formattedPacksize")) or "1 item",
                 "deliveryTime": "10 mins",
                 "discount": discount,
                 "imageUrl": image_url,
-                "available": available,
-                "source": "zepto"
+                "available": not prod_resp.get("outOfStock", False),
+                "source": "zepto",
             })
-        except Exception:
-            pass
-            
-    return products[:8]
+        except Exception as e:
+            print(f"[Zepto] item parse error: {type(e).__name__}: {e}")
+    return products
+
+
+def _parse(payload):
+    items = []
+    for widget in payload.get("layout") or []:
+        if widget.get("widgetId") != "PRODUCT_GRID":
+            continue
+        resolver_data = ((widget.get("data") or {}).get("resolver") or {}).get("data") or {}
+        items.extend(resolver_data.get("items") or [])
+    return extract_products(items)
+
+
+async def search(page, search_term):
+    encoded = urllib.parse.quote(search_term)
+    print(f"[Zepto] Searching for: {search_term}")
+
+    pincode = _pincode or '201301'
+    lat = _lat or '28.5821195'
+    lon = _lon or '77.3266991'
+
+    async def set_cookies():
+        # These have to land after the origin exists, otherwise Chrome drops
+        # them and Zepto answers for its default store instead of ours.
+        for name, value in (("latitude", lat), ("longitude", lon), ("location", pincode)):
+            await page.send(zd.cdp.network.set_cookie(
+                name=name, value=str(value), domain='.zepto.com', path='/', secure=True
+            ))
+
+    async def attempt():
+        return await common.intercept_json(
+            page,
+            tag="Zepto",
+            match=lambda url: "api/v3/search" in url and "filters" not in url,
+            parse=_parse,
+            navigate=f"https://www.zepto.com/search?query={encoded}",
+            warmup="https://www.zepto.com/",
+            before_navigate=set_cookies,
+            timeout=15.0,
+        )
+
+    return await common.run_search(page, search_term, attempt, tag="Zepto")

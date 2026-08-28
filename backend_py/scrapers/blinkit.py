@@ -1,7 +1,11 @@
 import urllib.parse
 import asyncio
 import json
+import re
+
 import zendriver as zd
+
+from . import common
 
 LOCATION_COORDS = {
   'delhi': { 'lat': 28.6139, 'lon': 77.2090 },
@@ -81,56 +85,29 @@ async def set_location(page, location):
         print(f"[Blinkit] Location set error: {e}")
     return False
 
-async def search(page, search_term):
-    encoded = urllib.parse.quote(search_term)
-    print(f"[Blinkit] Searching for: {search_term}")
+# Blinkit encodes the promised ETA in the icon filename ("15-mins.png"); the
+# adjacent title text is a useless literal "earliest".
+_ETA_RE = re.compile(r"/(\d+)[-_]?mins?", re.I)
 
-    collected_snippets = []
-    resolved = {"done": False}
-    target_requests = set()
 
-    async def handle_response(event: zd.cdp.network.ResponseReceived):
-        if resolved["done"]: return
-        if "blinkit.com/v1/layout/search" not in event.response.url: return
-        target_requests.add(event.request_id)
+def _delivery_time(raw):
+    eta = raw.get("eta_tag") or {}
+    icon = ((eta.get("image") or {}).get("url")) or ""
+    m = _ETA_RE.search(icon)
+    if m:
+        return f"{m.group(1)} mins"
+    text = common.clean(((eta.get("title") or {}).get("text")))
+    if text and text.lower() not in ("earliest", "eta"):
+        return text
+    return "10-20 mins"
 
-    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
-        if resolved["done"]: return
-        if event.request_id not in target_requests: return
-        
-        try:
-            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
-            if body_info:
-                json_data = json.loads(body_info[0])
-                if json_data and "response" in json_data and "snippets" in json_data["response"]:
-                    snippets = json_data["response"]["snippets"]
-                    collected_snippets.extend(snippets)
-                    if collected_snippets:
-                        resolved["done"] = True
-        except Exception as e:
-            pass
 
-    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
-    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
+def _text(node):
+    """Blinkit wraps every display string as {'text': ..., 'font': ...}."""
+    if isinstance(node, dict):
+        return common.clean(node.get("text"))
+    return common.clean(node)
 
-    try:
-        await page.send(zd.cdp.network.enable())
-        await page.get(f"https://blinkit.com/s/?q={encoded}")
-    except Exception:
-        pass
-
-    # Wait for API to fire
-    for _ in range(120): # 12 seconds max
-        if resolved["done"]: break
-        await asyncio.sleep(0.1)
-
-    page.remove_handlers(zd.cdp.network.ResponseReceived)
-    page.remove_handlers(zd.cdp.network.LoadingFinished)
-
-    if not collected_snippets:
-        return []
-
-    return extract_products(collected_snippets)
 
 def extract_products(snippets):
     products = []
@@ -138,83 +115,74 @@ def extract_products(snippets):
         raw = s.get("data")
         if not raw:
             continue
-        
-        # Skip containers / headers / non-product widgets
-        widget_type = s.get("widget_type", "")
-        if (
-            widget_type == 'image_text_vr_type_header' or
-            not raw.get("name") or
-            not raw.get("identity") or
-            raw.get("identity", {}).get("id") in ['product_container', 'listing_container', 'recent_searches_pill_container']
-        ):
+
+        # Headers, carousels and pill containers ride in the same snippet list.
+        if s.get("widget_type", "") == "image_text_vr_type_header":
+            continue
+        identity_id = (raw.get("identity") or {}).get("id")
+        if not raw.get("name") or not identity_id:
+            continue
+        if not str(identity_id).isdigit():
             continue
 
         try:
-            pid = raw.get("identity", {}).get("id", "Unknown")
-            # Only process numeric product IDs (skip string container IDs)
-            try:
-                int(pid)
-            except ValueError:
+            name = _text(raw.get("name"))
+            if not name:
                 continue
 
-            name = raw.get("name", {}).get("text", "Unknown").strip()
-            
-            price = "N/A"
-            if raw.get("normal_price") and raw.get("normal_price", {}).get("text"):
-                price = raw.get("normal_price", {}).get("text")
-            elif raw.get("price") is not None:
-                price = f"₹{raw.get('price')}"
+            sp = _text(raw.get("normal_price")) or raw.get("price")
+            mrp = _text(raw.get("mrp"))
+            price, orig_price, savings, discount = common.price_fields(sp, mrp)
 
-            orig_price = None
-            if raw.get("mrp") and raw.get("mrp", {}).get("text"):
-                orig_price = raw.get("mrp", {}).get("text")
+            # Prefer Blinkit's own offer copy when it has one.
+            offer = _text((raw.get("offer_tag") or {}).get("title"))
+            if offer:
+                discount = offer.replace("\n", " ")
 
-            quantity = raw.get("variant", {}).get("text", "N/A")
-            image = raw.get("image", {}).get("url", "")
-            
-            delivery_time = "Standard Delivery"
-            if raw.get("eta_tag") and raw.get("eta_tag", {}).get("title", {}).get("text"):
-                delivery_time = raw.get("eta_tag", {}).get("title", {}).get("text")
-
-            discount = None
-            if raw.get("offer_tag") and raw.get("offer_tag", {}).get("title", {}).get("text"):
-                discount = raw.get("offer_tag", {}).get("title", {}).get("text").replace("\n", " ")
-
-            available = True
             if "is_sold_out" in raw:
                 available = not raw["is_sold_out"]
             elif "inventory" in raw:
-                available = raw["inventory"] > 0
-
-            savings = None
-            if orig_price and price:
-                try:
-                    import re
-                    pr_match = re.search(r'₹\s*(\d+(?:\.\d+)?)', price)
-                    op_match = re.search(r'₹\s*(\d+(?:\.\d+)?)', orig_price)
-                    if pr_match and op_match:
-                        cur = float(pr_match.group(1))
-                        orig = float(op_match.group(1))
-                        if orig > cur:
-                            savings = f"₹{int(orig - cur)}"
-                except Exception:
-                    pass
+                available = (raw.get("inventory") or 0) > 0
+            else:
+                available = raw.get("product_state", "available") == "available"
 
             products.append({
-                "id": pid,
+                "id": f"bk_{identity_id}",
                 "name": name,
                 "price": price,
                 "originalPrice": orig_price,
                 "savings": savings,
-                "quantity": quantity,
-                "deliveryTime": delivery_time,
+                "quantity": _text(raw.get("variant")) or "1 item",
+                "deliveryTime": _delivery_time(raw),
                 "discount": discount,
-                "imageUrl": image,
+                "imageUrl": (raw.get("image") or {}).get("url", ""),
                 "available": available,
-                "source": "blinkit"
+                "source": "blinkit",
             })
         except Exception as e:
-            print(f"[Blinkit] Extract snippet error: {e}")
-            pass
+            print(f"[Blinkit] snippet parse error: {type(e).__name__}: {e}")
+    return products
 
-    return products[:8]
+
+def _parse(payload):
+    snippets = (payload.get("response") or {}).get("snippets") or []
+    return extract_products(snippets)
+
+
+async def search(page, search_term):
+    encoded = urllib.parse.quote(search_term)
+    print(f"[Blinkit] Searching for: {search_term}")
+
+    async def attempt():
+        return await common.intercept_json(
+            page,
+            tag="Blinkit",
+            # The paginated follow-up (offset=...) uses the same path, so a
+            # plain substring match picks up both pages of results.
+            match=lambda url: "blinkit.com/v1/layout/search" in url,
+            parse=_parse,
+            navigate=f"https://blinkit.com/s/?q={encoded}",
+            timeout=15.0,
+        )
+
+    return await common.run_search(page, search_term, attempt, tag="Blinkit")
