@@ -1,12 +1,15 @@
 """Shared scraping primitives.
 
-Every platform we support renders its product grid from a private JSON API, so
-all five scrapers do the same thing: warm up a session on the origin, navigate
-to the search URL, intercept the API response over CDP, and parse it.
+The five quick-commerce platforms all render their product grid from a private
+JSON API, so each scraper does the same thing: warm up a session on the origin,
+navigate to the search URL, intercept the API response over CDP, and parse it.
+`intercept_json` holds that once. Amazon renders server-side instead, so
+`scrape_dom` is its counterpart -- same block detection, same ScrapeResult
+contract, so callers cannot tell the two apart.
 
-This module holds that logic once, plus the bits the per-platform copies were
-each missing: retrying the response-body fetch, telling "blocked" apart from
-"no results", and pushing sponsored/irrelevant cards below real matches.
+Both feed `run_search`, which adds what the per-platform copies were each
+missing: retrying the response-body fetch, telling "blocked" apart from "no
+results", and pushing sponsored/irrelevant cards below real matches.
 """
 
 import asyncio
@@ -371,6 +374,65 @@ async def intercept_json(
         return ScrapeResult([], EMPTY, "Search API returned no products.")
 
     return ScrapeResult([], TIMEOUT, "Search API never responded.")
+
+
+async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
+    """Load a server-rendered page and pull products out of its DOM.
+
+    The counterpart to intercept_json for sites that ship HTML rather than
+    calling a private API (Amazon). Shares the same block detection and
+    ScrapeResult contract so callers cannot tell the two apart.
+
+    `extract` is a JS expression evaluated in the page that must return a JSON
+    string: an array of normalised product dicts.
+    """
+    try:
+        await page.send(zd.cdp.network.enable())
+    except Exception:
+        pass
+
+    status = {"code": None}
+
+    async def on_response(event):
+        # Only the top-level document status tells us we were turned away.
+        url = event.response.url or ""
+        if url.split("?")[0] == navigate.split("?")[0]:
+            try:
+                status["code"] = event.response.status
+            except Exception:
+                pass
+
+    page.add_handler(zd.cdp.network.ResponseReceived, on_response)
+    try:
+        try:
+            await asyncio.wait_for(page.get(navigate), timeout=timeout)
+        except asyncio.TimeoutError:
+            return ScrapeResult([], TIMEOUT, "Page did not finish loading.")
+        except Exception as e:
+            return ScrapeResult([], ERROR, f"{type(e).__name__}: {e}")
+        await asyncio.sleep(settle)
+    finally:
+        page.remove_handlers(zd.cdp.network.ResponseReceived)
+
+    if status["code"] in _BLOCK_STATUSES:
+        return ScrapeResult([], BLOCKED, f"Rejected with HTTP {status['code']}.")
+
+    if await _page_looks_blocked(page):
+        return ScrapeResult([], BLOCKED, "Served a bot challenge instead of results.")
+
+    try:
+        raw = await page.evaluate(extract)
+    except Exception as e:
+        return ScrapeResult([], ERROR, f"extract failed: {type(e).__name__}: {e}")
+
+    try:
+        items = json.loads(raw) if isinstance(raw, str) else (raw or [])
+    except (ValueError, TypeError) as e:
+        return ScrapeResult([], ERROR, f"extract returned non-JSON: {e}")
+
+    if not items:
+        return ScrapeResult([], EMPTY, "Page contained no product cards.")
+    return ScrapeResult(list(items), OK)
 
 
 async def run_search(page, search_term, attempt_fn, *, tag, attempts=2):

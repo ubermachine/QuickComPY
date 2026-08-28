@@ -4,7 +4,7 @@ Both the API and the frontend read from here (the frontend via /api/services)
 so adding a platform means touching one list, not four files.
 """
 
-from .scrapers import bigbasket, blinkit, instamart, jiomart, zepto
+from .scrapers import amazon, bigbasket, blinkit, instamart, jiomart, zepto
 
 
 class Platform:
@@ -32,6 +32,7 @@ PLATFORMS = [
     Platform("bigbasket", "BigBasket", bigbasket, "#84cc16", "#65a30d"),
     Platform("jiomart", "JioMart", jiomart, "#3b82f6", "#2563eb"),
     Platform("zepto", "Zepto", zepto, "#a855f7", "#9333ea"),
+    Platform("amazon", "Amazon", amazon, "#ff9900", "#e47911"),
 ]
 
 BY_KEY = {p.key: p for p in PLATFORMS}
