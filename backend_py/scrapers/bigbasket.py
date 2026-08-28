@@ -3,6 +3,8 @@ import asyncio
 import re
 import zendriver as zd
 
+from . import common
+
 LOCATION_COORDS = {
     'delhi': '110001', 'new delhi': '110001', 'mumbai': '400001',
     'bengaluru': '560001', 'bangalore': '560001', 'hyderabad': '500001',
@@ -52,111 +54,79 @@ async def set_location(page, location):
         print(f"[Bigbasket] Location set error: {e}")
     return False
 
+
+def extract_products(raw_products):
+    products = []
+    for p in raw_products:
+        try:
+            name = common.clean(p.get("desc"))
+            if not name:
+                continue
+            brand = common.clean((p.get("brand") or {}).get("name"))
+            if brand and brand.lower() not in name.lower():
+                name = f"{brand} {name}"
+
+            discount_info = (p.get("pricing") or {}).get("discount") or {}
+            sp = (discount_info.get("prim_price") or {}).get("sp")
+            price, orig_price, savings, discount = common.price_fields(sp, discount_info.get("mrp"))
+
+            # BigBasket's own copy ("SAVE 15%") beats a computed percentage.
+            offer = common.clean(discount_info.get("offer_entry_text") or discount_info.get("d_text"))
+            if offer:
+                discount = offer
+
+            image_url = ""
+            images = p.get("images")
+            if isinstance(images, list) and images:
+                image_url = images[0].get("m") or images[0].get("s") or ""
+
+            # BigBasket runs both a slotted and an express ("BB Now") fleet; a
+            # per-product ETA only exists on the express listings.
+            eta = common.clean(p.get("bb_now_eta") or (p.get("delivery_info") or {}).get("eta"))
+
+            # avail_status "001" is in stock; anything else is out of stock or
+            # not serviceable at this pincode.
+            availability = p.get("availability") or {}
+            available = str(availability.get("avail_status", "001")) == "001"
+
+            products.append({
+                "id": f"bb_{p.get('id', name)}",
+                "name": name,
+                "price": price,
+                "originalPrice": orig_price,
+                "savings": savings,
+                "quantity": common.clean(p.get("w") or p.get("weight")) or "1 item",
+                "deliveryTime": eta or "Standard Delivery",
+                "discount": discount,
+                "imageUrl": image_url,
+                "available": available,
+                "source": "bigbasket",
+            })
+        except Exception as e:
+            print(f"[Bigbasket] item parse error: {type(e).__name__}: {e}")
+    return products
+
+
+def _parse(payload):
+    tabs = payload.get("tabs") or []
+    if not tabs:
+        return []
+    product_info = tabs[0].get("product_info") or {}
+    return extract_products(product_info.get("products") or [])
+
+
 async def search(page, search_term):
     encoded = urllib.parse.quote(search_term)
     print(f"[Bigbasket] Searching for: {search_term}")
 
-    collected_products = []
-    resolved = {"done": False}
-    target_requests = set()
+    async def attempt():
+        return await common.intercept_json(
+            page,
+            tag="Bigbasket",
+            match=lambda url: "listing-svc/v2/products" in url,
+            parse=_parse,
+            navigate=f"https://www.bigbasket.com/ps/?q={encoded}",
+            timeout=18.0,
+        )
 
-    async def handle_response(event: zd.cdp.network.ResponseReceived):
-        if resolved["done"]: return
-        if "listing-svc/v2/products" in event.response.url and event.response.mime_type == "application/json":
-            target_requests.add(event.request_id)
-
-    async def handle_loading_finished(event: zd.cdp.network.LoadingFinished):
-        if resolved["done"]: return
-        if event.request_id not in target_requests: return
-        
-        try:
-            body_info = await page.send(zd.cdp.network.get_response_body(request_id=event.request_id))
-            if body_info:
-                import json
-                json_data = json.loads(body_info[0])
-                tabs = json_data.get("tabs", [])
-                if tabs:
-                    product_info = tabs[0].get("product_info", {})
-                    products = product_info.get("products", [])
-                    
-                    for p in products:
-                        try:
-                            pid = str(p.get("id", ""))
-                            name = p.get("desc", "Unknown")
-                            brand = p.get("brand", {}).get("name", "")
-                            if brand and brand.lower() not in name.lower():
-                                name = f"{brand} {name}"
-                                
-                            pricing = p.get("pricing", {})
-                            discount_info = pricing.get("discount", {})
-                            prim_price = discount_info.get("prim_price", {})
-                            
-                            sp = prim_price.get("sp")
-                            mrp = discount_info.get("mrp")
-                            
-                            price = f"₹{sp}" if sp else "N/A"
-                            orig_price = f"₹{mrp}" if mrp and str(mrp) != str(sp) else None
-                            
-                            savings = None
-                            discount = None
-                            if sp and mrp:
-                                try:
-                                    f_sp = float(sp)
-                                    f_mrp = float(mrp)
-                                    if f_mrp > f_sp:
-                                        savings = f"₹{int(f_mrp - f_sp)}"
-                                        discount = f"{int(((f_mrp - f_sp)/f_mrp)*100)}% OFF"
-                                except Exception:
-                                    pass
-                                    
-                            quantity = p.get("w", "") or p.get("weight", "") or "1 item"
-                            
-                            images = p.get("images", [])
-                            image_url = ""
-                            if images and isinstance(images, list):
-                                image_url = images[0].get("m", "") or images[0].get("s", "")
-                            
-                            # Bigbasket standard delivery is usually listed as "Standard Delivery" or derived
-                            delivery_time = "Standard Delivery"
-                            
-                            available = True # If it's in the search results, it's usually available unless marked
-                            
-                            collected_products.append({
-                                "id": f"bb_{pid}",
-                                "name": name,
-                                "price": price,
-                                "originalPrice": orig_price,
-                                "savings": savings,
-                                "quantity": quantity,
-                                "deliveryTime": delivery_time,
-                                "discount": discount,
-                                "imageUrl": image_url,
-                                "available": available,
-                                "source": "bigbasket"
-                            })
-                        except Exception as e:
-                            print(f"[Bigbasket] Extractor loop error: {e}")
-                    
-                    if collected_products:
-                        resolved["done"] = True
-        except Exception as e:
-            pass
-
-    page.add_handler(zd.cdp.network.ResponseReceived, handle_response)
-    page.add_handler(zd.cdp.network.LoadingFinished, handle_loading_finished)
-
-    try:
-        await page.send(zd.cdp.network.enable())
-        await page.get(f"https://www.bigbasket.com/ps/?q={encoded}")
-    except Exception:
-        pass
-
-    # Wait for API to fire
-    for _ in range(150): # 15 seconds max
-        if resolved["done"]: break
-        await asyncio.sleep(0.1)
-
-    page.remove_handlers(zd.cdp.network.ResponseReceived)
-    page.remove_handlers(zd.cdp.network.LoadingFinished)
-
-    return collected_products[:8]
+    return await common.run_search(page, search_term, attempt, tag="Bigbasket")

@@ -7,44 +7,44 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); 
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
             color: #f8fafc;
             min-height: 100vh;
             padding: 2rem;
         }
         h1 { text-align: center; margin-bottom: 2rem; font-weight: 800; font-size: 2.5rem; }
         .container { max-width: 1400px; margin: 0 auto; }
-        
+
         /* Location Section */
         .section-title { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: #e2e8f0; }
         .presets-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1rem; }
-        .preset-btn { 
-            background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2); 
+        .preset-btn {
+            background: rgba(255,255,255,0.1); color: #f8fafc; border: 1px solid rgba(255,255,255,0.2);
             padding: 0.75rem; border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600; transition: all 0.2s;
         }
         .preset-btn:hover:not(:disabled) { background: rgba(255,255,255,0.2); border-color: rgba(255,255,255,0.4); }
         .preset-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-        
+
         .input-row { display: flex; gap: 1rem; margin-bottom: 1rem; align-items: flex-end; }
         .input-group { flex: 3; display: flex; flex-direction: column; gap: 0.5rem; }
         .input-group label { color: #f8fafc; font-size: 0.9rem; font-weight: 600; }
-        input[type="text"] { 
+        input[type="text"] {
             background: rgba(255,255,255,0.12); color: #f8fafc; border: 1px solid rgba(255,255,255,0.25);
             padding: 0.75rem; border-radius: 8px; font-family: inherit; font-size: 1rem; outline: none; width: 100%;
         }
         input[type="text"]::placeholder { color: #94a3b8; }
         input[type="text"]:focus { border-color: #3b82f6; }
         input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .primary-btn { 
-            flex: 1; background: #3b82f6; color: white; border: none; padding: 0.75rem; 
+
+        .primary-btn {
+            flex: 1; background: #3b82f6; color: white; border: none; padding: 0.75rem;
             border-radius: 8px; cursor: pointer; font-family: inherit; font-weight: 600; font-size: 1rem; transition: background 0.2s; height: 46px;
         }
         .primary-btn:hover:not(:disabled) { background: #2563eb; }
         .primary-btn:disabled { background: #1e3a8a; color: #94a3b8; cursor: not-allowed; }
-        
+
         /* Status Badges */
         #status-container { margin-bottom: 2rem; display: none; }
         .success-box { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); padding: 1rem; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; }
@@ -53,19 +53,19 @@
         .badge-err { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 4px 10px; border-radius: 20px; font-size: 0.85em; font-weight: 600; }
         .change-loc-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: white; padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; font-family: inherit; }
         .change-loc-btn:hover { background: rgba(255,255,255,0.2); }
-        
+
         hr { border: none; border-top: 1px solid rgba(255,255,255,0.1); margin: 2rem 0; }
-        
+
         /* Loading Overlay */
         #loading-overlay { display: none; margin-top: 2rem; text-align: center; color: #94a3b8; font-weight: 600; }
         .spinner { border: 4px solid rgba(255,255,255,0.1); border-left-color: #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 1rem auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
+
         /* Grid Layout */
         #results-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem; margin-top: 2rem; display: none; }
         .vendor-col { display: flex; flex-direction: column; gap: 1rem; }
         .vendor-header { text-align: center; margin-bottom: 1rem; }
-        
+
         .brand-badge { padding: 4px 12px; border-radius: 20px; font-weight: 800; font-size: 1em; display: inline-block; color: white; text-transform: uppercase; letter-spacing: 1px; }
         .bg-blinkit { background: linear-gradient(90deg, #f59e0b, #d97706); }
         .bg-bigbasket { background: linear-gradient(90deg, #84cc16, #65a30d); }
@@ -73,7 +73,7 @@
         .bg-zepto { background: linear-gradient(90deg, #8b5cf6, #6d28d9); }
         .bg-instamart { background: linear-gradient(90deg, #f97316, #ea580c); }
         .vendor-count { color: #94a3b8; font-size: 0.85em; margin-top: 0.25rem; }
-        
+
         /* Glass Cards */
         .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; height: 100%; }
         .glass-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(255, 255, 255, 0.2); }
@@ -84,8 +84,14 @@
         .current-price { font-size: 1.25em; font-weight: 800; color: #34d399; }
         .original-price { text-decoration: line-through; color: #64748b; font-size: 0.9em; }
         .discount-badge { background: rgba(239, 68, 68, 0.2); color: #f87171; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: 600; display: inline-block; margin-top: 4px; }
+        .status-note { text-align: center; font-size: 0.85em; padding: 1.25rem 0.75rem; border-radius: 8px; line-height: 1.4; }
+        .status-blocked { color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(248, 113, 113, 0.4); }
+        .status-timeout { color: #fcd34d; background: rgba(245, 158, 11, 0.08); border: 1px dashed rgba(252, 211, 77, 0.4); }
+        .status-error   { color: #fca5a5; background: rgba(239, 68, 68, 0.08); border: 1px dashed rgba(248, 113, 113, 0.4); }
+        .status-icon { display: block; font-size: 1.5em; margin-bottom: 0.4rem; }
+        .vendor-count.warn { color: #fcd34d; }
         .empty-state { text-align: center; color: #94a3b8; font-style: italic; padding: 2rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1); }
-        
+
         @media (max-width: 1024px) {
             #results-container { grid-template-columns: repeat(2, 1fr); }
             .presets-grid { grid-template-columns: repeat(2, 1fr); }
@@ -100,7 +106,7 @@
 <body>
     <div class="container">
         <h1>⚡ QuickCom Search</h1>
-        
+
         <div id="location-section">
             <h3 class="section-title">📍 Select Delivery Location</h3>
             <div class="presets-grid">
@@ -109,7 +115,7 @@
                 <button class="preset-btn" onclick="setPincode('110001')">Delhi (110001)</button>
                 <button class="preset-btn" onclick="setPincode('560001')">Bangalore (560001)</button>
             </div>
-            
+
             <div class="input-row">
                 <div class="input-group">
                     <label>Pincode</label>
@@ -118,7 +124,7 @@
                 <button class="primary-btn" id="set-loc-btn" onclick="submitLocation()">Set Location</button>
             </div>
         </div>
-        
+
         <div id="status-container">
             <div class="success-box">
                 <div>
@@ -128,9 +134,9 @@
                 <button class="change-loc-btn" onclick="resetLocation()">Change</button>
             </div>
         </div>
-        
+
         <hr>
-        
+
         <div id="search-section">
             <h3 class="section-title">🔍 Search Products</h3>
             <div class="input-row">
@@ -140,21 +146,45 @@
                 <button class="primary-btn" id="search-btn" onclick="submitSearch()" disabled>Search All Apps</button>
             </div>
         </div>
-        
+
         <div id="loading-overlay">
             <div class="spinner"></div>
             <div id="loading-text">Initializing...</div>
         </div>
-        
+
         <div id="results-container">
             <!-- Columns will be injected here -->
         </div>
     </div>
 
     <script>
-        const SERVICES = ["blinkit", "instamart", "bigbasket", "jiomart", "zepto"];
-        const DISPLAY_NAMES = { blinkit: "Blinkit", instamart: "Swiggy", bigbasket: "BigBasket", jiomart: "JioMart", zepto: "Zepto" };
+        // Populated from /api/services so the backend registry stays the single
+        // source of truth; these are only a fallback if that call fails.
+        let SERVICES = ["blinkit", "instamart", "bigbasket", "jiomart", "zepto"];
+        let DISPLAY_NAMES = { blinkit: "Blinkit", instamart: "Swiggy Instamart", bigbasket: "BigBasket", jiomart: "JioMart", zepto: "Zepto" };
+        let BRAND_COLORS = {};
         let isLocationSet = false;
+
+        async function loadServices() {
+            try {
+                const res = await fetch('/api/services');
+                if(!res.ok) return;
+                const data = await res.json();
+                if(!data.services || !data.services.length) return;
+                SERVICES = data.services.map(s => s.key);
+                DISPLAY_NAMES = {};
+                BRAND_COLORS = {};
+                for(const s of data.services) {
+                    DISPLAY_NAMES[s.key] = s.label;
+                    BRAND_COLORS[s.key] = `linear-gradient(90deg, ${s.colorFrom}, ${s.colorTo})`;
+                }
+                document.getElementById('results-container').style.gridTemplateColumns =
+                    `repeat(${SERVICES.length}, 1fr)`;
+            } catch (e) {
+                // Fall back to the hardcoded list above.
+            }
+        }
+        loadServices();
 
         function setPincode(code) {
             if(!isLocationSet) document.getElementById('pincode-input').value = code;
@@ -165,7 +195,7 @@
             const presetBtns = document.querySelectorAll('.preset-btn');
             presetBtns.forEach(btn => btn.disabled = locDisabled);
             document.getElementById('set-loc-btn').disabled = locDisabled;
-            
+
             document.getElementById('search-input').disabled = searchDisabled;
             document.getElementById('search-btn').disabled = searchDisabled;
         }
@@ -173,12 +203,12 @@
         async function submitLocation() {
             const loc = document.getElementById('pincode-input').value;
             if(!loc) return;
-            
+
             setInputsDisabled(true, true);
             document.getElementById('loading-overlay').style.display = 'block';
             document.getElementById('loading-text').innerText = 'Initializing vendor sessions... This may take up to 15 seconds.';
             document.getElementById('results-container').style.display = 'none';
-            
+
             try {
                 const res = await fetch('/api/set-location', {
                     method: 'POST',
@@ -186,11 +216,11 @@
                     body: JSON.stringify({ location: loc })
                 });
                 const data = await res.json();
-                
+
                 document.getElementById('current-loc-text').innerText = loc;
                 const badgesDiv = document.getElementById('vendor-badges');
                 badgesDiv.innerHTML = '';
-                
+
                 for(const svc of SERVICES) {
                     const name = DISPLAY_NAMES[svc] || svc;
                     if(data[svc]) {
@@ -199,7 +229,7 @@
                         badgesDiv.innerHTML += `<span class="badge-err">[ERR] ${name} Failed</span>`;
                     }
                 }
-                
+
                 document.getElementById('location-section').style.display = 'none';
                 document.getElementById('status-container').style.display = 'block';
                 isLocationSet = true;
@@ -224,18 +254,18 @@
         async function submitSearch() {
             const query = document.getElementById('search-input').value;
             if(!query) return;
-            
+
             setInputsDisabled(true, true);
             document.getElementById('loading-overlay').style.display = 'block';
             document.getElementById('loading-text').innerText = `Searching for '${query}' across all vendors...`;
             document.getElementById('results-container').style.display = 'none';
-            
+
             try {
                 const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
                 const data = await res.json();
-                
+
                 renderResults(data);
-                
+
                 document.getElementById('results-container').style.display = 'grid';
             } catch (e) {
                 alert('Error performing search');
@@ -244,7 +274,7 @@
                 setInputsDisabled(true, false);
             }
         }
-        
+
         // Allow enter key in search
         document.getElementById('search-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') submitSearch();
@@ -252,7 +282,7 @@
 
         function escapeHTML(str) {
             if(!str) return '';
-            return str.toString().replace(/[&<>'"]/g, 
+            return str.toString().replace(/[&<>'"]/g,
                 tag => ({
                     '&': '&amp;',
                     '<': '&lt;',
@@ -263,29 +293,63 @@
             );
         }
 
+        const STATUS_LABEL = {
+            ok: 'No items', empty: 'No matches',
+            blocked: 'Blocked', timeout: 'Timed out', error: 'Failed'
+        };
+
+        // An empty column has very different meanings -- the store genuinely has
+        // nothing, or it served us a bot challenge. Say which.
+        function statusNote(svc, result) {
+            const name = DISPLAY_NAMES[svc] || svc;
+            const el = document.createElement('div');
+            const detail = {
+                blocked: ['&#128683;', `${name} blocked the request (bot protection). Try again in a moment.`, 'status-blocked'],
+                timeout: ['&#9203;', `${name} did not respond in time.`, 'status-timeout'],
+                error:   ['&#9888;', `Could not reach ${name}.`, 'status-error'],
+            }[result.status];
+
+            if(!detail) {
+                el.className = 'empty-state';
+                el.innerText = 'No products found';
+                return el;
+            }
+            const [icon, text, cls] = detail;
+            el.className = `status-note ${cls}`;
+            el.innerHTML = `<span class="status-icon">${icon}</span>${escapeHTML(text)}`;
+            return el;
+        }
+
         function renderResults(data) {
             const container = document.getElementById('results-container');
             container.innerHTML = '';
-            
+
             for(const svc of SERVICES) {
-                const products = data[svc] || [];
-                
+                // The API returns {products, status, message}; tolerate a bare
+                // array in case an older backend is serving.
+                const raw = data[svc];
+                const result = Array.isArray(raw) ? { products: raw, status: raw.length ? 'ok' : 'empty' } : (raw || { products: [], status: 'error' });
+                const products = result.products || [];
+
                 const col = document.createElement('div');
                 col.className = 'vendor-col';
-                
+
                 const header = document.createElement('div');
                 header.className = 'vendor-header';
-                header.innerHTML = `
-                    <div class="brand-badge bg-${svc}">${DISPLAY_NAMES[svc] || svc}</div>
-                    <div class="vendor-count">Found ${products.length} items</div>
-                `;
+                const badge = document.createElement('div');
+                badge.className = 'brand-badge';
+                badge.textContent = DISPLAY_NAMES[svc] || svc;
+                if(BRAND_COLORS[svc]) { badge.style.background = BRAND_COLORS[svc]; }
+                else { badge.classList.add(`bg-${svc}`); }
+                const count = document.createElement('div');
+                count.className = products.length ? 'vendor-count' : 'vendor-count warn';
+                count.textContent = products.length ? `Found ${products.length} items` : STATUS_LABEL[result.status] || 'Unavailable';
+                header.appendChild(badge);
+                header.appendChild(count);
                 col.appendChild(header);
-                
+
                 if(products.length === 0) {
-                    const empty = document.createElement('div');
-                    empty.className = 'empty-state';
-                    empty.innerText = 'No products found';
-                    col.appendChild(empty);
+                    col.appendChild(statusNote(svc, result));
                 } else {
                     for(const p of products) {
                         const name = escapeHTML(p.name || 'Unknown');
@@ -295,27 +359,27 @@
                         const delivery = escapeHTML(p.deliveryTime || 'N/A');
                         const discount = escapeHTML(p.discount || '');
                         const img = escapeHTML(p.imageUrl || '');
-                        
+
                         const card = document.createElement('div');
                         card.className = 'glass-card';
-                        
+
                         let html = '';
                         if(img) html += `<img src="${img}" class="product-img">`;
                         html += `<div class="product-title">${name}</div>`;
                         html += `<div class="product-meta">${qty} | Time: ${delivery}</div>`;
-                        
+
                         html += `<div class="price-row">`;
                         html += `<span class="current-price">${price}</span>`;
                         if(orig) html += `<span class="original-price">${orig}</span>`;
                         html += `</div>`;
-                        
+
                         if(discount) html += `<div><span class="discount-badge">${discount}</span></div>`;
-                        
+
                         card.innerHTML = html;
                         col.appendChild(card);
                     }
                 }
-                
+
                 container.appendChild(col);
             }
         }
