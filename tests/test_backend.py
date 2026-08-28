@@ -21,10 +21,11 @@ import pytest
 # 1.  Scraper module discovery
 # ---------------------------------------------------------------------------
 
-EXPECTED_SERVICES = ["blinkit", "bigbasket", "jiomart", "zepto"]
-# instamart has working scraper code but is NOT in the app's SERVICES list
-ADDITIONAL_SCRAPERS = ["instamart"]
-ALL_SCRAPERS = EXPECTED_SERVICES + ADDITIONAL_SCRAPERS
+from backend_py.registry import KEYS as ALL_SCRAPERS  # noqa: E402
+
+# Derived from backend_py/registry.py rather than restated here, so adding a
+# platform cannot leave this list quietly stale.
+EXPECTED_SERVICES = ALL_SCRAPERS
 
 
 @pytest.mark.parametrize("name", ALL_SCRAPERS)
@@ -40,18 +41,30 @@ def test_scraper_module_importable(name):
     assert callable(module.search), f"{name}.search not callable"
 
 
-def test_app_services_defined():
-    """Verify the SERVICE names used in streamlit/app.py match the
-    scraper modules.
-    
-    Note: we do NOT import app.py here because its module-level
-    initialization starts a Zendriver browser.  The constant is
-    verified against the known list defined in app.py's source.
+def test_registry_entries_are_well_formed():
+    """Every registered platform has a module, a label and brand colours.
+
+    main.py and the frontend both drive off this, so a malformed row breaks
+    the API and the UI together.
     """
-    # These are the services listed in streamlit/app.py (line 44)
-    app_services = ["blinkit", "bigbasket", "jiomart", "zepto"]
-    for svc in app_services:
-        assert svc in EXPECTED_SERVICES, f"Unexpected service: {svc}"
+    from backend_py.registry import PLATFORMS
+
+    assert PLATFORMS, "registry must not be empty"
+    for p in PLATFORMS:
+        assert p.key and p.key.islower(), f"bad key: {p.key!r}"
+        assert p.label, f"{p.key} has no display label"
+        assert hasattr(p.module, "search"), f"{p.key} module has no search()"
+        assert hasattr(p.module, "set_location"), f"{p.key} module has no set_location()"
+        for colour in (p.color_from, p.color_to):
+            assert colour.startswith("#") and len(colour) == 7, \
+                f"{p.key} has a non-hex colour: {colour!r}"
+
+
+def test_registry_keys_are_unique():
+    from backend_py.registry import PLATFORMS
+
+    keys = [p.key for p in PLATFORMS]
+    assert len(keys) == len(set(keys)), f"duplicate platform keys: {keys}"
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +77,7 @@ REQUIRED_KEYS = [
     "available", "source",
 ]
 
-VALID_SOURCES = ["blinkit", "bigbasket", "jiomart", "zepto", "instamart"]
+VALID_SOURCES = list(ALL_SCRAPERS)
 
 
 def _valid_product(**overrides):

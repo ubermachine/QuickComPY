@@ -62,7 +62,7 @@
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
         /* Grid Layout */
-        #results-container { display: grid; grid-template-columns: repeat(5, 1fr); gap: 1.5rem; margin-top: 2rem; display: none; }
+        #results-container { display: grid; grid-template-columns: repeat(var(--vendor-cols, 5), 1fr); gap: 1.5rem; margin-top: 2rem; display: none; }
         .vendor-col { display: flex; flex-direction: column; gap: 1rem; }
         .vendor-header { text-align: center; margin-bottom: 1rem; }
 
@@ -178,8 +178,10 @@
                     DISPLAY_NAMES[s.key] = s.label;
                     BRAND_COLORS[s.key] = `linear-gradient(90deg, ${s.colorFrom}, ${s.colorTo})`;
                 }
-                document.getElementById('results-container').style.gridTemplateColumns =
-                    `repeat(${SERVICES.length}, 1fr)`;
+                // A custom property, not an inline grid-template-columns: an
+                // inline value would override the responsive media queries.
+                document.getElementById('results-container')
+                    .style.setProperty('--vendor-cols', SERVICES.length);
             } catch (e) {
                 // Fall back to the hardcoded list above.
             }
