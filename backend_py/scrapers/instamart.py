@@ -165,7 +165,10 @@ async def search(page, search_term):
         return await common.intercept_json(
             page,
             tag="Instamart",
-            match=lambda url: "api/instamart/search" in url,
+            # Pin to the product-search endpoint. A looser "api/instamart/search"
+            # also matches suggestion/autocomplete calls, and latching onto one
+            # of those makes the engine give up before the real grid arrives.
+            match=lambda url: "api/instamart/search/v2" in url,
             parse=_parse,
             navigate=f"https://www.swiggy.com/instamart/search?query={encoded}",
             warmup=warmup,

@@ -34,20 +34,37 @@ MAX_PRODUCTS = 8
 # in case the grid arrives in a follow-up paginated call.
 EMPTY_GRACE = 2.5
 
-# Substrings that show up in WAF / bot-challenge interstitials. Checked against
-# the page's own HTML, because these are served with a 200 and would otherwise
-# look like an ordinary page that simply never fired the search API.
-_BLOCK_MARKERS = (
-    "captcha",
+# Phrases that appear on a real bot-challenge interstitial. Matched against the
+# page's *visible text and title* rather than its raw HTML: scanning raw HTML is
+# how an earlier version reported every Swiggy page as blocked, because Swiggy
+# embeds the AWS WAF SDK (edge.sdk.awswaf.com/challenge.js) on healthy pages too.
+_BLOCK_PHRASES = (
     "are you a human",
     "access denied",
     "request blocked",
     "attention required",
     "unusual traffic",
-    "awswaf",
-    "challenge-error-text",
-    "cf-error-details",
+    "verify you are a human",
+    "enter the characters you see below",
     "please enable javascript and cookies",
+    "checking your browser",
+    "robot check",
+)
+
+# A challenge page is a stub. Anything with a real app shell rendered is not one,
+# however many WAF scripts it happens to load.
+_BLOCK_TEXT_CEILING = 2000
+
+# Live challenge widgets. Presence of the *container* means a challenge is being
+# shown; the vendor SDK merely being loaded means nothing.
+_BLOCK_SELECTORS = (
+    "#challenge-running",
+    "#challenge-form",
+    "form[action*='validateCaptcha']",
+    "#captchacharacters",
+    "[id*='awswaf-captcha']",
+    "iframe[src*='awswaf.com/captcha']",
+    "#px-captcha",
 )
 
 # HTTP statuses that mean the origin rejected us rather than the page failing.
@@ -216,16 +233,50 @@ def dedupe(products):
 # Interception engine
 # --------------------------------------------------------------------------
 
+_BLOCK_PROBE_JS = """
+JSON.stringify((function () {
+  var sels = %s;
+  var widget = null;
+  for (var i = 0; i < sels.length; i++) {
+    var el = document.querySelector(sels[i]);
+    // A hidden node proves nothing -- the challenge must actually be showing.
+    if (el && el.offsetParent !== null) { widget = sels[i]; break; }
+  }
+  var body = document.body ? (document.body.innerText || '') : '';
+  return {
+    widget: widget,
+    title: (document.title || '').slice(0, 200),
+    text: body.slice(0, 4000),
+    length: body.length
+  };
+})())
+"""
+
+
 async def _page_looks_blocked(page):
-    """True when the current document is a bot challenge rather than the site."""
+    """True when the current document is a bot challenge rather than the site.
+
+    Deliberately conservative. A false positive is expensive: BLOCKED is the one
+    status run_search will not retry, so mislabelling a transient miss as a block
+    turns it into a permanent failure for that request.
+    """
     try:
-        html = await page.get_content()
+        raw = await page.evaluate(_BLOCK_PROBE_JS % json.dumps(list(_BLOCK_SELECTORS)))
+        info = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
         return False
-    if not html:
+    if not isinstance(info, dict):
         return False
-    low = html[:200_000].lower()
-    return any(marker in low for marker in _BLOCK_MARKERS)
+
+    # A visible challenge widget is unambiguous.
+    if info.get("widget"):
+        return True
+
+    # Otherwise require a challenge phrase *and* a page too small to be the app.
+    if info.get("length", 0) > _BLOCK_TEXT_CEILING:
+        return False
+    haystack = f"{info.get('title', '')} {info.get('text', '')}".lower()
+    return any(phrase in haystack for phrase in _BLOCK_PHRASES)
 
 
 async def _get_body(page, request_id, attempts=3):
@@ -450,14 +501,16 @@ async def run_search(page, search_term, attempt_fn, *, tag, attempts=2):
             print(f"[{tag}] attempt {i + 1} raised: {type(e).__name__}: {e}")
         if result.status == OK and result.products:
             break
-        # Only a missed interception is worth retrying. A block will not clear
-        # on an immediate retry, and EMPTY means the API already answered --
-        # asking again just burns another full timeout.
-        if result.status in (BLOCKED, EMPTY):
+        # EMPTY means the API already answered -- asking again just burns
+        # another full timeout. Everything else is worth one more go, blocks
+        # included: these WAF challenges are usually negotiated by the browser
+        # on the next load rather than being a standing ban.
+        if result.status == EMPTY:
             break
         if i < attempts - 1:
-            print(f"[{tag}] attempt {i + 1} gave {result.status}, retrying")
-            await asyncio.sleep(1.0)
+            backoff = 3.0 if result.status == BLOCKED else 1.0
+            print(f"[{tag}] attempt {i + 1} gave {result.status}, retrying in {backoff}s")
+            await asyncio.sleep(backoff)
 
     result.products = rank_by_relevance(dedupe(result.products), search_term)[:MAX_PRODUCTS]
     if result.status == OK and not result.products:
