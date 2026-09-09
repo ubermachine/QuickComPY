@@ -30,6 +30,16 @@ ERROR = "error"
 
 MAX_PRODUCTS = 8
 
+# How many ranked candidates each scraper keeps behind the visible MAX_PRODUCTS.
+# Sorting or filtering by discount has to see past the eight most *relevant*
+# items, or a 60%-off product sitting tenth by relevance could never surface.
+POOL_SIZE = 40
+
+# Sort modes accepted by the search API.
+SORT_RELEVANCE = "relevance"
+SORT_DISCOUNT = "discount"
+SORT_MODES = (SORT_RELEVANCE, SORT_DISCOUNT)
+
 # How long to keep listening after an API response that contained no products,
 # in case the grid arrives in a follow-up paginated call.
 EMPTY_GRACE = 2.5
@@ -216,6 +226,61 @@ def clean(text):
     return text or None
 
 
+# Platform discount copy: "47% OFF", "SAVE 15%", "11% OFF".
+_PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+
+
+def discount_percent(product):
+    """How much a product is discounted, as a number between 0 and 100.
+
+    Derived from price against originalPrice wherever both are known, because
+    that is arithmetic rather than trust: platforms write their own discount
+    copy and it is inconsistent ("SAVE 15%", "47% OFF", sometimes a rupee
+    amount, sometimes an unrelated promo). The copy is only parsed as a
+    fallback, for platforms that advertise a percentage without exposing MRP.
+    """
+    sp = _to_float(product.get("price"))
+    mrp = _to_float(product.get("originalPrice"))
+    if sp is not None and mrp is not None and mrp > sp > 0:
+        return round((mrp - sp) / mrp * 100, 1)
+
+    m = _PERCENT_RE.search(str(product.get("discount") or ""))
+    if m:
+        try:
+            pct = float(m.group(1))
+        except ValueError:
+            return 0.0
+        # Guard against a promo string that is not really a discount.
+        return round(pct, 1) if 0 < pct < 100 else 0.0
+    return 0.0
+
+
+def annotate_discounts(products):
+    """Attach a numeric discountPercent to every product, in place."""
+    for p in products:
+        p["discountPercent"] = discount_percent(p)
+    return products
+
+
+def apply_view(products, *, sort=SORT_RELEVANCE, min_discount=0, limit=MAX_PRODUCTS):
+    """Filter and order an already-ranked pool for display.
+
+    Kept separate from scraping so the same pool can be re-sorted without
+    hitting the platforms again. Input order is the relevance ranking, so
+    SORT_RELEVANCE is simply "leave it alone".
+    """
+    view = list(products)
+
+    if min_discount and min_discount > 0:
+        view = [p for p in view if p.get("discountPercent", 0) >= min_discount]
+
+    if sort == SORT_DISCOUNT:
+        # Stable, so equally-discounted items keep their relevance order.
+        view.sort(key=lambda p: p.get("discountPercent", 0), reverse=True)
+
+    return view[:limit] if limit else view
+
+
 def dedupe(products):
     """Drop repeat entries, keyed on id then name."""
     seen = set()
@@ -298,6 +363,45 @@ async def _get_body(page, request_id, attempts=3):
     return None
 
 
+async def wait_for(page, predicate_js, timeout=6.0, interval=0.25):
+    """Poll a JS boolean expression until it is true, or the budget runs out.
+
+    Returns whether it became true. Preferable to a flat sleep in either
+    direction: it continues as soon as the page is ready, and it keeps waiting
+    when the page is slower than the guess baked into a fixed interval.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        try:
+            if await page.evaluate(f"!!({predicate_js})") is True:
+                return True
+        except Exception:
+            pass
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(interval)
+
+
+async def _needs_warmup(page, origin):
+    """True when this origin has no session cookies yet in the browser profile.
+
+    The warmup navigation exists to let the site set its session and WAF
+    cookies before the search request goes out. Those cookies live in the
+    browser profile, not the tab, so once set_location has visited an origin
+    every later tab already carries them and loading the homepage again is a
+    wasted round trip -- measured at 3.3s per search on Instamart alone.
+
+    Falls back to warming up whenever we cannot tell, so the cheap path is only
+    taken on positive evidence.
+    """
+    try:
+        cookies = await page.send(zd.cdp.network.get_cookies(urls=[origin]))
+    except Exception:
+        return True
+    return not cookies
+
+
 async def intercept_json(
     page,
     *,
@@ -373,7 +477,7 @@ async def intercept_json(
     except Exception:
         pass
 
-    if warmup:
+    if warmup and await _needs_warmup(page, warmup):
         try:
             await page.get(warmup)
             await asyncio.sleep(warmup_wait)
@@ -427,7 +531,8 @@ async def intercept_json(
     return ScrapeResult([], TIMEOUT, "Search API never responded.")
 
 
-async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
+async def scrape_dom(page, *, tag, navigate, extract, settle=6.0, settle_min=1.2,
+                     timeout=20.0):
     """Load a server-rendered page and pull products out of its DOM.
 
     The counterpart to intercept_json for sites that ship HTML rather than
@@ -437,6 +542,7 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
     `extract` is a JS expression evaluated in the page that must return a JSON
     string: an array of normalised product dicts.
     """
+    loop = asyncio.get_running_loop()
     try:
         await page.send(zd.cdp.network.enable())
     except Exception:
@@ -461,25 +567,44 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
             return ScrapeResult([], TIMEOUT, "Page did not finish loading.")
         except Exception as e:
             return ScrapeResult([], ERROR, f"{type(e).__name__}: {e}")
-        await asyncio.sleep(settle)
+
+        # Poll for product cards rather than sleeping a flat interval: a
+        # server-rendered page is usually ready well before the ceiling, and a
+        # slow one gets the full budget instead of being read too early.
+        #
+        # Wait for the count to *stabilise*, not merely to become non-zero.
+        # Amazon streams its grid in, so reading on the first card that appears
+        # captured four products out of forty.
+        items, last_error, previous = [], None, -1
+        started = loop.time()
+        deadline = started + settle
+        # settle_min stops us accepting an early plateau: rendering pauses, so
+        # two equal readings a moment apart is not proof the grid is complete.
+        floor = started + settle_min
+        while True:
+            try:
+                raw = await page.evaluate(extract)
+                items = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except Exception as e:
+                last_error, items = e, []
+            now = loop.time()
+            if items and len(items) == previous and now >= floor:
+                break
+            if now >= deadline:
+                break
+            previous = len(items)
+            await asyncio.sleep(0.3)
     finally:
         page.remove_handlers(zd.cdp.network.ResponseReceived)
 
     if status["code"] in _BLOCK_STATUSES:
         return ScrapeResult([], BLOCKED, f"Rejected with HTTP {status['code']}.")
 
-    if await _page_looks_blocked(page):
+    if not items and await _page_looks_blocked(page):
         return ScrapeResult([], BLOCKED, "Served a bot challenge instead of results.")
 
-    try:
-        raw = await page.evaluate(extract)
-    except Exception as e:
-        return ScrapeResult([], ERROR, f"extract failed: {type(e).__name__}: {e}")
-
-    try:
-        items = json.loads(raw) if isinstance(raw, str) else (raw or [])
-    except (ValueError, TypeError) as e:
-        return ScrapeResult([], ERROR, f"extract returned non-JSON: {e}")
+    if not items and last_error is not None:
+        return ScrapeResult([], ERROR, f"extract failed: {type(last_error).__name__}: {last_error}")
 
     if not items:
         return ScrapeResult([], EMPTY, "Page contained no product cards.")
@@ -512,7 +637,11 @@ async def run_search(page, search_term, attempt_fn, *, tag, attempts=2):
             print(f"[{tag}] attempt {i + 1} gave {result.status}, retrying in {backoff}s")
             await asyncio.sleep(backoff)
 
-    result.products = rank_by_relevance(dedupe(result.products), search_term)[:MAX_PRODUCTS]
+    # Keep a pool rather than trimming to MAX_PRODUCTS here: the API layer
+    # applies the caller's sort/filter over these candidates and caps the
+    # visible list. Order is the relevance ranking, which is the default view.
+    ranked = rank_by_relevance(dedupe(result.products), search_term)[:POOL_SIZE]
+    result.products = annotate_discounts(ranked)
     if result.status == OK and not result.products:
         result.status = EMPTY
     print(f"[{tag}] {result.status}: {len(result.products)} products")

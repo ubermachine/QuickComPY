@@ -34,6 +34,18 @@
             background: rgba(255,255,255,0.12); color: #f8fafc; border: 1px solid rgba(255,255,255,0.25);
             padding: 0.75rem; border-radius: 8px; font-family: inherit; font-size: 1rem; outline: none; width: 100%;
         }
+        select {
+            background: rgba(255,255,255,0.12); color: #f8fafc; border: 1px solid rgba(255,255,255,0.25);
+            padding: 0.75rem; border-radius: 8px; font-family: inherit; font-size: 0.95rem; outline: none;
+            width: 100%; cursor: pointer;
+        }
+        select:focus { border-color: #3b82f6; }
+        select:disabled { opacity: 0.5; cursor: not-allowed; }
+        select option { background: #1e293b; color: #f8fafc; }
+        .filter-group { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 150px; }
+        .filter-group label { color: #cbd5e1; font-size: 0.8rem; font-weight: 600; }
+        .filter-note { color: #94a3b8; font-size: 0.85em; margin-top: -0.5rem; margin-bottom: 1rem; }
+        .discount-pct { color: #34d399; font-weight: 700; font-size: 0.8em; }
         input[type="text"]::placeholder { color: #94a3b8; }
         input[type="text"]:focus { border-color: #3b82f6; }
         input[type="text"]:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -143,8 +155,26 @@
                 <div class="input-group">
                     <input type="text" id="search-input" placeholder="e.g. Milk, Bread, Eggs..." disabled>
                 </div>
+                <div class="filter-group">
+                    <label for="sort-select">Sort by</label>
+                    <select id="sort-select" onchange="onViewChange()" disabled>
+                        <option value="relevance" selected>Best match</option>
+                        <option value="discount">Biggest discount</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label for="discount-select">Min discount</label>
+                    <select id="discount-select" onchange="onViewChange()" disabled>
+                        <option value="0" selected>Any</option>
+                        <option value="10">10% or more</option>
+                        <option value="20">20% or more</option>
+                        <option value="30">30% or more</option>
+                        <option value="50">50% or more</option>
+                    </select>
+                </div>
                 <button class="primary-btn" id="search-btn" onclick="submitSearch()" disabled>Search All Apps</button>
             </div>
+            <div class="filter-note" id="filter-note"></div>
         </div>
 
         <div id="loading-overlay">
@@ -200,6 +230,8 @@
 
             document.getElementById('search-input').disabled = searchDisabled;
             document.getElementById('search-btn').disabled = searchDisabled;
+            document.getElementById('sort-select').disabled = searchDisabled;
+            document.getElementById('discount-select').disabled = searchDisabled;
         }
 
         async function submitLocation() {
@@ -253,9 +285,36 @@
             document.getElementById('search-input').value = '';
         }
 
+        function currentView() {
+            return {
+                sort: document.getElementById('sort-select').value,
+                minDiscount: parseInt(document.getElementById('discount-select').value, 10) || 0
+            };
+        }
+
+        // Changing sort or filter re-runs the query. The backend caches the
+        // scraped pool briefly, so this returns almost instantly rather than
+        // hitting all six platforms again.
+        function onViewChange() {
+            const query = document.getElementById('search-input').value;
+            if(query && !document.getElementById('search-btn').disabled) submitSearch();
+        }
+
+        function describeView(data) {
+            const { sort, minDiscount } = currentView();
+            const shown = SERVICES.reduce((n, s) => n + ((data[s] && data[s].products) || []).length, 0);
+            const matched = SERVICES.reduce((n, s) => n + ((data[s] && data[s].matched) || 0), 0);
+            const bits = [];
+            if(minDiscount > 0) bits.push(`filtered to ${minDiscount}%+ off`);
+            if(sort === 'discount') bits.push('sorted by biggest discount');
+            if(matched > shown) bits.push(`showing top ${shown} of ${matched} matches`);
+            document.getElementById('filter-note').innerText = bits.length ? bits.join(' \u00b7 ') : '';
+        }
+
         async function submitSearch() {
             const query = document.getElementById('search-input').value;
             if(!query) return;
+            const { sort, minDiscount } = currentView();
 
             setInputsDisabled(true, true);
             document.getElementById('loading-overlay').style.display = 'block';
@@ -263,10 +322,12 @@
             document.getElementById('results-container').style.display = 'none';
 
             try {
-                const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+                const params = new URLSearchParams({ q: query, sort: sort, min_discount: minDiscount });
+                const res = await fetch(`/api/search?${params}`);
                 const data = await res.json();
 
                 renderResults(data);
+                describeView(data);
 
                 document.getElementById('results-container').style.display = 'grid';
             } catch (e) {
@@ -375,7 +436,10 @@
                         if(orig) html += `<span class="original-price">${orig}</span>`;
                         html += `</div>`;
 
-                        if(discount) html += `<div><span class="discount-badge">${discount}</span></div>`;
+                        if(discount || p.discountPercent > 0) {
+                            const badge = discount || `${Math.round(p.discountPercent)}% OFF`;
+                            html += `<div><span class="discount-badge">${escapeHTML(badge)}</span></div>`;
+                        }
 
                         card.innerHTML = html;
                         col.appendChild(card);

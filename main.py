@@ -1,9 +1,10 @@
 import asyncio
 import os
+import time
 from contextlib import asynccontextmanager
 
 import zendriver as zd
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -17,6 +18,34 @@ MAX_CONCURRENT_TABS = int(os.environ.get("MAX_CONCURRENT_TABS", "4"))
 
 SEARCH_TIMEOUT = float(os.environ.get("SEARCH_TIMEOUT", "60"))
 LOCATION_TIMEOUT = float(os.environ.get("LOCATION_TIMEOUT", "25"))
+
+# Re-sorting or re-filtering a result set must not mean scraping all six
+# platforms again -- that is fifteen seconds the user should not pay twice, and
+# repeat traffic for the same query is exactly what gets an IP challenged.
+SEARCH_CACHE_TTL = float(os.environ.get("SEARCH_CACHE_TTL", "120"))
+SEARCH_CACHE_MAX = 32
+
+# query -> (expires_at, {platform_key: ScrapeResult})
+_pool_cache = {}
+
+
+def _cache_get(key):
+    entry = _pool_cache.get(key)
+    if not entry:
+        return None
+    expires_at, pools = entry
+    if time.monotonic() > expires_at:
+        _pool_cache.pop(key, None)
+        return None
+    return pools
+
+
+def _cache_put(key, pools):
+    if len(_pool_cache) >= SEARCH_CACHE_MAX:
+        # Cheap eviction: drop whatever expires soonest.
+        oldest = min(_pool_cache, key=lambda k: _pool_cache[k][0])
+        _pool_cache.pop(oldest, None)
+    _pool_cache[key] = (time.monotonic() + SEARCH_CACHE_TTL, pools)
 
 _STEALTH_JS = """
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -168,6 +197,8 @@ async def services():
 
 @app.post("/api/set-location")
 async def set_location(body: LocationRequest):
+    # Cached pools are location-specific; a new pincode makes them wrong.
+    _pool_cache.clear()
     sem = app.state.sem
     results = await asyncio.gather(*[
         set_loc_svc(app.state.browser, key, body.location, sem) for key in KEYS
@@ -183,20 +214,72 @@ async def set_location(body: LocationRequest):
     return out
 
 
-@app.get("/api/search")
-async def search(q: str):
+async def _gather_pools(q):
+    """Scrape every platform for `q`, or reuse a recent pool for the same query."""
+    key = q.strip().lower()
+    cached = _cache_get(key)
+    if cached is not None:
+        print(f"Serving '{q}' from cache")
+        return cached
+
     sem = app.state.sem
     results = await asyncio.gather(*[
-        search_svc(app.state.browser, key, q, sem) for key in KEYS
+        search_svc(app.state.browser, svc, q, sem) for svc in KEYS
     ], return_exceptions=True)
 
-    out = {}
-    for key, res in zip(KEYS, results):
+    pools = {}
+    for svc, res in zip(KEYS, results):
         if isinstance(res, Exception):
-            print(f"Service {key} failed with exception: {res}")
-            out[key] = common.ScrapeResult([], common.ERROR, str(res)).to_dict()
+            print(f"Service {svc} failed with exception: {res}")
+            pools[svc] = common.ScrapeResult([], common.ERROR, str(res))
         else:
-            out[key] = res[1].to_dict()
+            pools[svc] = res[1]
+
+    # Only worth caching if something actually succeeded; caching a round of
+    # blocks would keep serving them for the whole TTL.
+    if any(p.status == common.OK for p in pools.values()):
+        _cache_put(key, pools)
+    return pools
+
+
+@app.get("/api/search")
+async def search(
+    q: str,
+    sort: str = Query(common.SORT_RELEVANCE, pattern="^(relevance|discount)$"),
+    min_discount: int = Query(0, ge=0, le=99),
+):
+    """Search every platform.
+
+    `sort` and `min_discount` shape the view only -- the underlying scrape is
+    identical, so the default call behaves exactly as it always has.
+    """
+    pools = await _gather_pools(q)
+
+    out = {}
+    for svc in KEYS:
+        pool = pools[svc]
+        # Build the full filtered set once, then slice -- computing it twice
+        # just to count the matches doubled the sort for no reason.
+        matched = common.apply_view(
+            pool.products, sort=sort, min_discount=min_discount, limit=None,
+        )
+        view = matched[:common.MAX_PRODUCTS]
+
+        status, message = pool.status, pool.message
+        # Distinguish "this platform gave us nothing" from "your filter
+        # excluded everything it did give us".
+        if not view and pool.products:
+            status = common.EMPTY
+            message = f"No items at {min_discount}% off or more."
+
+        out[svc] = {
+            "products": view,
+            "status": status,
+            "message": message,
+            # How many of the platform's candidates passed the filter, so the
+            # UI can say "showing 8 of 23" rather than implying there were 8.
+            "matched": len(matched),
+        }
     return out
 
 

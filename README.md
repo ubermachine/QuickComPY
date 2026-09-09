@@ -16,8 +16,22 @@ so it is read from the DOM.
 | ✅ **Swiggy Instamart** | Working | `/api/instamart/search/v2` | Geolocation override + `userLocation` cookie ⚠️ |
 | ✅ **Zepto** | Working | `/api/v3/search` | `latitude` / `longitude` / `location` cookies |
 | ✅ **BigBasket** | Working | `/listing-svc/v2/products` | `bb_pincode` cookie family |
-| ✅ **JioMart** | Working | `/ext/vertex/application/api` | Pincode entered through the site's modal |
+| ✅ **JioMart** | Working | `/ext/vertex/application/api` | `app_location_details` / `app_geolocation` cookies — verified against the header |
 | ✅ **Amazon.in** | Working | DOM (`[data-component-type="s-search-result"]`) | `glow/address-change` — verified against the city Amazon returns |
+
+### JioMart location
+
+JioMart's location modal is a Google Places autocomplete whose suggestion list
+does not lay out in headless Chrome — its `.pac-item` reports a zero-size
+bounding box, so neither synthetic nor real CDP clicks can pick a result. An
+earlier implementation drove that modal, slept seven seconds through it, and
+returned `True` regardless, leaving every user on JioMart's **Mumbai** default
+no matter which pincode they entered.
+
+Location is now set through the same cookies the site writes itself
+(`app_location_details`, `app_geolocation`, plus the `pin` localStorage key),
+and confirmed by reading the pincode back out of JioMart's own header. That is
+both correct and roughly twice as fast.
 
 ### Amazon.in notes
 
@@ -61,6 +75,30 @@ confirms the change, reporting the city it resolved to.
 - **Retries and early exit**: A missed interception is retried once; a
   confirmed block or a genuinely empty result is not, so a no-match query
   settles in seconds instead of burning two full timeouts.
+- **Sort and filter by discount**: Every product carries a numeric
+  `discountPercent`, computed from price against MRP rather than trusted from
+  the platform's own copy (which ranges from `SAVE 15%` to `₹16 OFF` to an
+  unrelated promo). Results can be ordered by biggest saving or filtered to a
+  minimum discount, without changing the default search.
+- **Wider candidate pool**: Scrapers keep `POOL_SIZE` (40) ranked candidates
+  while the UI shows `MAX_PRODUCTS` (8). Sorting by discount therefore reaches
+  genuine bargains that rank tenth or lower on relevance -- trimming to eight
+  before sorting would hide them permanently.
+- **No redundant warmups**: `search` used to load each platform's homepage
+  before the search URL, to establish session and WAF cookies. Those cookies
+  live in the browser profile, so once `set_location` has visited an origin the
+  extra load is pure latency — measured at 3.3s per Instamart search. The
+  warmup now runs only when the origin genuinely has no cookies yet, falling
+  back to warming up whenever that cannot be determined.
+- **Waiting on conditions, not clocks**: fixed `sleep()` calls were replaced by
+  polling for the thing actually being awaited. The DOM scraper waits for the
+  product count to *stabilise* rather than for the first card — Amazon streams
+  its grid in, and reading on first sight captured four products out of forty.
+- **Short-lived result cache**: Re-sorting or re-filtering reuses the scraped
+  pool for `SEARCH_CACHE_TTL` seconds (default 120) instead of hitting all six
+  platforms again -- a re-sort drops from ~17s to under 0.1s, and it removes
+  the repeat traffic that invites bot challenges. Cleared whenever the location
+  changes, since cached pools are location-specific.
 - **Relevance ranking**: Platforms inject sponsored cards at position 0
   (Blinkit will lead a "milk" search with cake rusk). Results are re-ranked so
   on-topic items surface first — demoted, never dropped, since "curd"
@@ -91,7 +129,18 @@ confirms the change, reporting the city it resolved to.
 |----------|---------|
 | `GET /api/services` | Platform registry (key, label, brand colours). The frontend reads this instead of hardcoding the list. |
 | `POST /api/set-location` | `{"location": "201306"}` — warms a session per platform. Returns `{platform: bool}`. |
-| `GET /api/search?q=` | Returns `{platform: {products, status, message}}` for every platform. |
+| `GET /api/search?q=` | Returns `{platform: {products, status, message, matched}}` for every platform. |
+
+`/api/search` also accepts two optional view parameters. Both default to the
+original behaviour, so an unchanged call returns exactly what it always did:
+
+| Param | Default | Meaning |
+|-------|---------|---------|
+| `sort` | `relevance` | `relevance` keeps the ranking; `discount` orders biggest saving first. |
+| `min_discount` | `0` | Drop anything discounted less than this percentage (0-99). |
+
+`matched` reports how many of a platform's candidates passed the filter, so the
+UI can say "showing top 8 of 23" rather than implying there were only eight.
 
 `status` is one of `ok`, `empty`, `blocked`, `timeout`, `error`.
 
@@ -114,6 +163,7 @@ That is the whole change: `main.py` and the frontend both read the registry.
 | `MAX_CONCURRENT_TABS` | `4` | Chromium tabs open at once. Lower it on a 512MB box. |
 | `SEARCH_TIMEOUT` | `60` | Per-platform search ceiling, seconds. |
 | `LOCATION_TIMEOUT` | `25` | Per-platform location ceiling, seconds. |
+| `SEARCH_CACHE_TTL` | `120` | Seconds a scraped pool is reused for re-sorting. `0` disables. |
 
 ## Project Structure
 
