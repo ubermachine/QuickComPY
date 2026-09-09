@@ -363,6 +363,45 @@ async def _get_body(page, request_id, attempts=3):
     return None
 
 
+async def wait_for(page, predicate_js, timeout=6.0, interval=0.25):
+    """Poll a JS boolean expression until it is true, or the budget runs out.
+
+    Returns whether it became true. Preferable to a flat sleep in either
+    direction: it continues as soon as the page is ready, and it keeps waiting
+    when the page is slower than the guess baked into a fixed interval.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while True:
+        try:
+            if await page.evaluate(f"!!({predicate_js})") is True:
+                return True
+        except Exception:
+            pass
+        if loop.time() >= deadline:
+            return False
+        await asyncio.sleep(interval)
+
+
+async def _needs_warmup(page, origin):
+    """True when this origin has no session cookies yet in the browser profile.
+
+    The warmup navigation exists to let the site set its session and WAF
+    cookies before the search request goes out. Those cookies live in the
+    browser profile, not the tab, so once set_location has visited an origin
+    every later tab already carries them and loading the homepage again is a
+    wasted round trip -- measured at 3.3s per search on Instamart alone.
+
+    Falls back to warming up whenever we cannot tell, so the cheap path is only
+    taken on positive evidence.
+    """
+    try:
+        cookies = await page.send(zd.cdp.network.get_cookies(urls=[origin]))
+    except Exception:
+        return True
+    return not cookies
+
+
 async def intercept_json(
     page,
     *,
@@ -438,7 +477,7 @@ async def intercept_json(
     except Exception:
         pass
 
-    if warmup:
+    if warmup and await _needs_warmup(page, warmup):
         try:
             await page.get(warmup)
             await asyncio.sleep(warmup_wait)
@@ -492,7 +531,8 @@ async def intercept_json(
     return ScrapeResult([], TIMEOUT, "Search API never responded.")
 
 
-async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
+async def scrape_dom(page, *, tag, navigate, extract, settle=6.0, settle_min=1.2,
+                     timeout=20.0):
     """Load a server-rendered page and pull products out of its DOM.
 
     The counterpart to intercept_json for sites that ship HTML rather than
@@ -502,6 +542,7 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
     `extract` is a JS expression evaluated in the page that must return a JSON
     string: an array of normalised product dicts.
     """
+    loop = asyncio.get_running_loop()
     try:
         await page.send(zd.cdp.network.enable())
     except Exception:
@@ -526,25 +567,44 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=2.5, timeout=20.0):
             return ScrapeResult([], TIMEOUT, "Page did not finish loading.")
         except Exception as e:
             return ScrapeResult([], ERROR, f"{type(e).__name__}: {e}")
-        await asyncio.sleep(settle)
+
+        # Poll for product cards rather than sleeping a flat interval: a
+        # server-rendered page is usually ready well before the ceiling, and a
+        # slow one gets the full budget instead of being read too early.
+        #
+        # Wait for the count to *stabilise*, not merely to become non-zero.
+        # Amazon streams its grid in, so reading on the first card that appears
+        # captured four products out of forty.
+        items, last_error, previous = [], None, -1
+        started = loop.time()
+        deadline = started + settle
+        # settle_min stops us accepting an early plateau: rendering pauses, so
+        # two equal readings a moment apart is not proof the grid is complete.
+        floor = started + settle_min
+        while True:
+            try:
+                raw = await page.evaluate(extract)
+                items = json.loads(raw) if isinstance(raw, str) else (raw or [])
+            except Exception as e:
+                last_error, items = e, []
+            now = loop.time()
+            if items and len(items) == previous and now >= floor:
+                break
+            if now >= deadline:
+                break
+            previous = len(items)
+            await asyncio.sleep(0.3)
     finally:
         page.remove_handlers(zd.cdp.network.ResponseReceived)
 
     if status["code"] in _BLOCK_STATUSES:
         return ScrapeResult([], BLOCKED, f"Rejected with HTTP {status['code']}.")
 
-    if await _page_looks_blocked(page):
+    if not items and await _page_looks_blocked(page):
         return ScrapeResult([], BLOCKED, "Served a bot challenge instead of results.")
 
-    try:
-        raw = await page.evaluate(extract)
-    except Exception as e:
-        return ScrapeResult([], ERROR, f"extract failed: {type(e).__name__}: {e}")
-
-    try:
-        items = json.loads(raw) if isinstance(raw, str) else (raw or [])
-    except (ValueError, TypeError) as e:
-        return ScrapeResult([], ERROR, f"extract returned non-JSON: {e}")
+    if not items and last_error is not None:
+        return ScrapeResult([], ERROR, f"extract failed: {type(last_error).__name__}: {last_error}")
 
     if not items:
         return ScrapeResult([], EMPTY, "Page contained no product cards.")

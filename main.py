@@ -258,10 +258,12 @@ async def search(
     out = {}
     for svc in KEYS:
         pool = pools[svc]
-        view = common.apply_view(
-            pool.products, sort=sort, min_discount=min_discount,
-            limit=common.MAX_PRODUCTS,
+        # Build the full filtered set once, then slice -- computing it twice
+        # just to count the matches doubled the sort for no reason.
+        matched = common.apply_view(
+            pool.products, sort=sort, min_discount=min_discount, limit=None,
         )
+        view = matched[:common.MAX_PRODUCTS]
 
         status, message = pool.status, pool.message
         # Distinguish "this platform gave us nothing" from "your filter
@@ -276,9 +278,7 @@ async def search(
             "message": message,
             # How many of the platform's candidates passed the filter, so the
             # UI can say "showing 8 of 23" rather than implying there were 8.
-            "matched": len(common.apply_view(
-                pool.products, sort=sort, min_discount=min_discount, limit=None,
-            )),
+            "matched": len(matched),
         }
     return out
 

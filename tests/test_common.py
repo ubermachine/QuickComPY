@@ -458,3 +458,67 @@ def test_sorting_by_discount_can_reach_past_the_visible_eight():
 
 def test_pool_is_larger_than_the_visible_page():
     assert common.POOL_SIZE > common.MAX_PRODUCTS
+
+
+# ---------------------------------------------------------------------------
+# wait_for / warmup gating
+# ---------------------------------------------------------------------------
+
+class _PredicatePage:
+    """Returns False for the first `flips` polls, then True."""
+
+    def __init__(self, flips=0, raises=False):
+        self.flips = flips
+        self.raises = raises
+        self.calls = 0
+
+    async def evaluate(self, _expression):
+        self.calls += 1
+        if self.raises:
+            raise RuntimeError("page gone")
+        return self.calls > self.flips
+
+
+def test_wait_for_returns_immediately_when_already_true():
+    page = _PredicatePage()
+    assert _run(common.wait_for(page, "x", timeout=2)) is True
+    assert page.calls == 1
+
+
+def test_wait_for_polls_until_true():
+    page = _PredicatePage(flips=2)
+    assert _run(common.wait_for(page, "x", timeout=3, interval=0.01)) is True
+    assert page.calls == 3
+
+
+def test_wait_for_gives_up_and_reports_false():
+    page = _PredicatePage(flips=10_000)
+    assert _run(common.wait_for(page, "x", timeout=0.1, interval=0.01)) is False
+
+
+def test_wait_for_survives_an_evaluate_error():
+    assert _run(common.wait_for(_PredicatePage(raises=True), "x", timeout=0.1, interval=0.01)) is False
+
+
+class _CookiePage:
+    def __init__(self, cookies):
+        self._cookies = cookies
+
+    async def send(self, _cmd):
+        if self._cookies is None:
+            raise RuntimeError("cdp failed")
+        return self._cookies
+
+
+def test_warmup_skipped_when_the_origin_already_has_cookies():
+    """The measured win: skipping a redundant homepage load per search."""
+    assert _run(common._needs_warmup(_CookiePage(["a-cookie"]), "https://x.test")) is False
+
+
+def test_warmup_needed_when_no_cookies_yet():
+    assert _run(common._needs_warmup(_CookiePage([]), "https://x.test")) is True
+
+
+def test_warmup_needed_when_the_check_itself_fails():
+    """Take the fast path only on positive evidence."""
+    assert _run(common._needs_warmup(_CookiePage(None), "https://x.test")) is True
