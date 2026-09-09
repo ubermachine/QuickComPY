@@ -301,11 +301,33 @@ def test_ok_with_no_products_is_downgraded_to_empty():
     assert _run(common.run_search(None, "milk", attempt, tag="T")).status == common.EMPTY
 
 
-def test_results_are_capped_at_max_products():
+def test_run_search_returns_a_pool_not_just_the_visible_page():
+    """The cap to MAX_PRODUCTS belongs to the view, not the scrape.
+
+    run_search keeps up to POOL_SIZE candidates so the API layer can sort or
+    filter across them; trimming to eight here would hide the best discount
+    whenever it ranks ninth or lower on relevance.
+    """
     many = [{"name": f"Milk {i}", "id": str(i)} for i in range(30)]
     attempt, _ = _attempts_recorder([common.ScrapeResult(many, common.OK)])
     result = _run(common.run_search(None, "milk", attempt, tag="T"))
-    assert len(result.products) == common.MAX_PRODUCTS
+    assert len(result.products) == 30
+    assert common.apply_view(result.products) == result.products[:common.MAX_PRODUCTS]
+
+
+def test_run_search_caps_the_pool():
+    many = [{"name": f"Milk {i}", "id": str(i)} for i in range(200)]
+    attempt, _ = _attempts_recorder([common.ScrapeResult(many, common.OK)])
+    result = _run(common.run_search(None, "milk", attempt, tag="T"))
+    assert len(result.products) == common.POOL_SIZE
+
+
+def test_run_search_annotates_discounts():
+    """Downstream sorting needs the numeric field to already be present."""
+    products = [{"name": "Amul Milk", "id": "1", "price": "₹75", "originalPrice": "₹100"}]
+    attempt, _ = _attempts_recorder([common.ScrapeResult(products, common.OK)])
+    result = _run(common.run_search(None, "milk", attempt, tag="T"))
+    assert result.products[0]["discountPercent"] == 25.0
 
 
 # The literal markup that caused the false positive: Swiggy serves this on
@@ -329,3 +351,110 @@ def test_block_phrases_are_specific_enough_to_be_phrases():
     """Single vendor/product names are too broad to identify a challenge."""
     for phrase in common._BLOCK_PHRASES:
         assert " " in phrase, f"{phrase!r} is a bare token, not a challenge phrase"
+
+
+# ---------------------------------------------------------------------------
+# Discount percentage, filtering and sorting
+# ---------------------------------------------------------------------------
+
+def _p(name, price=None, orig=None, discount=None):
+    return {"name": name, "price": price, "originalPrice": orig, "discount": discount}
+
+
+def test_discount_percent_computed_from_prices():
+    assert common.discount_percent(_p("A", "₹180", "₹240")) == 25.0
+
+
+def test_discount_percent_prefers_arithmetic_over_platform_copy():
+    """Platform copy is inconsistent; price vs MRP is not."""
+    p = _p("A", "₹180", "₹240", discount="SAVE 70%")
+    assert common.discount_percent(p) == 25.0
+
+
+def test_discount_percent_falls_back_to_copy_without_mrp():
+    assert common.discount_percent(_p("A", "₹100", None, "47% OFF")) == 47.0
+
+
+def test_discount_percent_zero_without_any_signal():
+    assert common.discount_percent(_p("A", "₹100")) == 0.0
+    assert common.discount_percent(_p("A", "₹100", None, "Buy 1 Get 1")) == 0.0
+
+
+def test_discount_percent_ignores_nonsense_copy():
+    """A "100% natural" claim is not a discount."""
+    assert common.discount_percent(_p("A", "₹100", None, "100% Natural")) == 0.0
+
+
+def test_discount_percent_handles_comma_separated_prices():
+    assert common.discount_percent(_p("A", "₹525", "₹1,050")) == 50.0
+
+
+def test_annotate_discounts_adds_the_field_to_every_product():
+    products = [_p("A", "₹180", "₹240"), _p("B", "₹50")]
+    common.annotate_discounts(products)
+    assert [p["discountPercent"] for p in products] == [25.0, 0.0]
+
+
+def test_default_view_preserves_relevance_order():
+    """The normal search must behave exactly as before."""
+    products = common.annotate_discounts([
+        _p("A", "₹90", "₹100"), _p("B", "₹10", "₹100"), _p("C", "₹99", "₹100"),
+    ])
+    assert _names(common.apply_view(products, limit=None)) == ["A", "B", "C"]
+
+
+def test_sort_by_discount_orders_biggest_first():
+    products = common.annotate_discounts([
+        _p("A", "₹90", "₹100"), _p("B", "₹10", "₹100"), _p("C", "₹50", "₹100"),
+    ])
+    view = common.apply_view(products, sort=common.SORT_DISCOUNT, limit=None)
+    assert _names(view) == ["B", "C", "A"]
+
+
+def test_sort_by_discount_is_stable_within_equal_discounts():
+    products = common.annotate_discounts([
+        _p("First", "₹50", "₹100"), _p("Second", "₹50", "₹100"),
+    ])
+    view = common.apply_view(products, sort=common.SORT_DISCOUNT, limit=None)
+    assert _names(view) == ["First", "Second"]
+
+
+def test_min_discount_filters_out_weaker_offers():
+    products = common.annotate_discounts([
+        _p("A", "₹90", "₹100"), _p("B", "₹10", "₹100"), _p("C", "₹50", "₹100"),
+    ])
+    view = common.apply_view(products, min_discount=40, limit=None)
+    assert _names(view) == ["B", "C"]
+
+
+def test_min_discount_can_exclude_everything():
+    products = common.annotate_discounts([_p("A", "₹90", "₹100")])
+    assert common.apply_view(products, min_discount=50, limit=None) == []
+
+
+def test_filter_and_sort_compose():
+    products = common.annotate_discounts([
+        _p("A", "₹90", "₹100"), _p("B", "₹10", "₹100"),
+        _p("C", "₹50", "₹100"), _p("D", "₹25", "₹100"),
+    ])
+    view = common.apply_view(products, sort=common.SORT_DISCOUNT, min_discount=40, limit=None)
+    assert _names(view) == ["B", "D", "C"]
+
+
+def test_view_respects_the_limit():
+    products = common.annotate_discounts([_p(f"P{i}", "₹50", "₹100") for i in range(30)])
+    assert len(common.apply_view(products, limit=common.MAX_PRODUCTS)) == common.MAX_PRODUCTS
+
+
+def test_sorting_by_discount_can_reach_past_the_visible_eight():
+    """The whole point of the pool: the best deal may rank low on relevance."""
+    products = common.annotate_discounts(
+        [_p(f"Relevant {i}", "₹99", "₹100") for i in range(8)]
+        + [_p("Deep Bargain", "₹10", "₹100")]
+    )
+    view = common.apply_view(products, sort=common.SORT_DISCOUNT, limit=common.MAX_PRODUCTS)
+    assert view[0]["name"] == "Deep Bargain"
+
+
+def test_pool_is_larger_than_the_visible_page():
+    assert common.POOL_SIZE > common.MAX_PRODUCTS

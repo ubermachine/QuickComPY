@@ -77,6 +77,10 @@ REQUIRED_KEYS = [
     "available", "source",
 ]
 
+# Added by common.run_search after scraping, not by the individual scrapers,
+# so it is checked separately from the per-scraper product shape.
+VIEW_KEYS = ["discountPercent"]
+
 VALID_SOURCES = list(ALL_SCRAPERS)
 
 

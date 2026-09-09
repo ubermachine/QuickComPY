@@ -30,6 +30,16 @@ ERROR = "error"
 
 MAX_PRODUCTS = 8
 
+# How many ranked candidates each scraper keeps behind the visible MAX_PRODUCTS.
+# Sorting or filtering by discount has to see past the eight most *relevant*
+# items, or a 60%-off product sitting tenth by relevance could never surface.
+POOL_SIZE = 40
+
+# Sort modes accepted by the search API.
+SORT_RELEVANCE = "relevance"
+SORT_DISCOUNT = "discount"
+SORT_MODES = (SORT_RELEVANCE, SORT_DISCOUNT)
+
 # How long to keep listening after an API response that contained no products,
 # in case the grid arrives in a follow-up paginated call.
 EMPTY_GRACE = 2.5
@@ -214,6 +224,61 @@ def clean(text):
     text = unicodedata.normalize("NFKC", str(text))
     text = re.sub(r"\s+", " ", text).strip()
     return text or None
+
+
+# Platform discount copy: "47% OFF", "SAVE 15%", "11% OFF".
+_PERCENT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*%")
+
+
+def discount_percent(product):
+    """How much a product is discounted, as a number between 0 and 100.
+
+    Derived from price against originalPrice wherever both are known, because
+    that is arithmetic rather than trust: platforms write their own discount
+    copy and it is inconsistent ("SAVE 15%", "47% OFF", sometimes a rupee
+    amount, sometimes an unrelated promo). The copy is only parsed as a
+    fallback, for platforms that advertise a percentage without exposing MRP.
+    """
+    sp = _to_float(product.get("price"))
+    mrp = _to_float(product.get("originalPrice"))
+    if sp is not None and mrp is not None and mrp > sp > 0:
+        return round((mrp - sp) / mrp * 100, 1)
+
+    m = _PERCENT_RE.search(str(product.get("discount") or ""))
+    if m:
+        try:
+            pct = float(m.group(1))
+        except ValueError:
+            return 0.0
+        # Guard against a promo string that is not really a discount.
+        return round(pct, 1) if 0 < pct < 100 else 0.0
+    return 0.0
+
+
+def annotate_discounts(products):
+    """Attach a numeric discountPercent to every product, in place."""
+    for p in products:
+        p["discountPercent"] = discount_percent(p)
+    return products
+
+
+def apply_view(products, *, sort=SORT_RELEVANCE, min_discount=0, limit=MAX_PRODUCTS):
+    """Filter and order an already-ranked pool for display.
+
+    Kept separate from scraping so the same pool can be re-sorted without
+    hitting the platforms again. Input order is the relevance ranking, so
+    SORT_RELEVANCE is simply "leave it alone".
+    """
+    view = list(products)
+
+    if min_discount and min_discount > 0:
+        view = [p for p in view if p.get("discountPercent", 0) >= min_discount]
+
+    if sort == SORT_DISCOUNT:
+        # Stable, so equally-discounted items keep their relevance order.
+        view.sort(key=lambda p: p.get("discountPercent", 0), reverse=True)
+
+    return view[:limit] if limit else view
 
 
 def dedupe(products):
@@ -512,7 +577,11 @@ async def run_search(page, search_term, attempt_fn, *, tag, attempts=2):
             print(f"[{tag}] attempt {i + 1} gave {result.status}, retrying in {backoff}s")
             await asyncio.sleep(backoff)
 
-    result.products = rank_by_relevance(dedupe(result.products), search_term)[:MAX_PRODUCTS]
+    # Keep a pool rather than trimming to MAX_PRODUCTS here: the API layer
+    # applies the caller's sort/filter over these candidates and caps the
+    # visible list. Order is the relevance ranking, which is the default view.
+    ranked = rank_by_relevance(dedupe(result.products), search_term)[:POOL_SIZE]
+    result.products = annotate_discounts(ranked)
     if result.status == OK and not result.products:
         result.status = EMPTY
     print(f"[{tag}] {result.status}: {len(result.products)} products")
