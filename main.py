@@ -16,6 +16,11 @@ from backend_py.scrapers import common
 # at once fits a 512MB box; the cap keeps that true as platforms are added.
 MAX_CONCURRENT_TABS = int(os.environ.get("MAX_CONCURRENT_TABS", "4"))
 
+# Product images, fonts and third-party telemetry are never read by a
+# scraper, and decoding them dominates renderer memory. Set BLOCK_ASSETS=0
+# to fetch everything, e.g. when debugging what a page actually renders.
+BLOCK_ASSETS = os.environ.get("BLOCK_ASSETS", "1") != "0"
+
 SEARCH_TIMEOUT = float(os.environ.get("SEARCH_TIMEOUT", "60"))
 LOCATION_TIMEOUT = float(os.environ.get("LOCATION_TIMEOUT", "25"))
 
@@ -59,6 +64,8 @@ Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
 async def stealth_new_page(browser):
     page = await browser.get('about:blank', new_tab=True)
     await page.send(zd.cdp.page.add_script_to_evaluate_on_new_document(source=_STEALTH_JS))
+    if BLOCK_ASSETS:
+        await common.block_heavy_resources(page)
     return page
 
 

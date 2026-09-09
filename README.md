@@ -160,10 +160,40 @@ That is the whole change: `main.py` and the frontend both read the registry.
 
 | Env var | Default | Purpose |
 |---------|---------|---------|
-| `MAX_CONCURRENT_TABS` | `4` | Chromium tabs open at once. Lower it on a 512MB box. |
+| `MAX_CONCURRENT_TABS` | `4` | Chromium tabs open at once — the main memory lever, see below. |
+| `BLOCK_ASSETS` | `1` | Skip fetching images/fonts/media/telemetry. `0` to fetch everything. |
 | `SEARCH_TIMEOUT` | `60` | Per-platform search ceiling, seconds. |
 | `LOCATION_TIMEOUT` | `25` | Per-platform location ceiling, seconds. |
 | `SEARCH_CACHE_TTL` | `120` | Seconds a scraped pool is reused for re-sorting. `0` disables. |
+
+## Memory
+
+Measured on a six-platform search, sampling Chromium plus Python RSS for the
+duration rather than reading it once at the end:
+
+| `MAX_CONCURRENT_TABS` | Peak RSS | Search wall time |
+|---|---|---|
+| 2 | ~1.6 GB | 13-15s |
+| 4 (default) | ~2.3 GB | ~10.5s |
+| 6 | ~2.1 GB | ~14.6s |
+
+Peak tracks the number of concurrent renderer processes, not page weight. Going
+to 6 is worse on both axes on a machine this size — the extra parallelism costs
+more in contention than it saves in waiting.
+
+**This does not fit a 512MB host, and cannot be made to.** Chromium's per-renderer
+floor is the constraint, so the knob moves peak between roughly 1.6GB and 2.3GB
+and no further. Anything advertising a 512MB free tier (Render, Koyeb) is out;
+see the hosting notes in the repository discussion for what works.
+
+`BLOCK_ASSETS` stops the browser fetching images, fonts, media and third-party
+telemetry — none of which any scraper reads, since image *URLs* come from the
+JSON payloads and DOM attributes rather than the decoded pixels. Worth being
+straight about the result: it did **not** measurably reduce peak memory
+(1942MB vs 1936MB), because renderer process overhead dominates. It is kept on
+by default because it removes a large number of pointless requests per search,
+which is worth having on a metered or rate-limited host, and it is one flag to
+turn off if a platform ever needs its images.
 
 ## Project Structure
 
