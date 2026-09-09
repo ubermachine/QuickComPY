@@ -82,12 +82,15 @@ def extract_products(raw_products):
 
             # BigBasket runs both a slotted and an express ("BB Now") fleet; a
             # per-product ETA only exists on the express listings.
-            eta = common.clean(p.get("bb_now_eta") or (p.get("delivery_info") or {}).get("eta"))
-
             # avail_status "001" is in stock; anything else is out of stock or
-            # not serviceable at this pincode.
+            # not serviceable at this pincode. The same block carries the
+            # express promise as short_eta ("10 mins") -- an earlier version
+            # looked for bb_now_eta and delivery_info.eta, neither of which
+            # exists, so every BigBasket row read "Standard Delivery" while the
+            # other platforms showed real minutes.
             availability = p.get("availability") or {}
             available = str(availability.get("avail_status", "001")) == "001"
+            eta = common.clean(availability.get("short_eta"))
 
             products.append({
                 "id": f"bb_{p.get('id', name)}",

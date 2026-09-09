@@ -363,6 +363,39 @@ async def _get_body(page, request_id, attempts=3):
     return None
 
 
+# Resources a scraper never reads. Product images are taken as URLs out of the
+# JSON payloads and DOM attributes, so the decoded pixels are pure cost: they
+# dominate renderer memory on a grid of forty products and buy us nothing.
+# Scripts are deliberately absent -- the sites' own WAF challenges are
+# JavaScript, and blocking those would get us challenged rather than served.
+BLOCKED_PATTERNS = [
+    "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.avif", "*.bmp", "*.ico",
+    "*.woff", "*.woff2", "*.ttf", "*.otf", "*.eot",
+    "*.mp4", "*.webm", "*.avi", "*.mov", "*.mp3",
+    # Third-party telemetry: fetched on every page, never read by us.
+    "*google-analytics.com*", "*googletagmanager.com*", "*doubleclick.net*",
+    "*facebook.net*", "*connect.facebook.com*", "*newrelic.com*",
+    "*nr-data.net*", "*clarity.ms*", "*hotjar.com*", "*segment.io*",
+    "*branch.io*", "*clevertap.com*", "*moengage.com*", "*mixpanel.com*",
+]
+
+
+async def block_heavy_resources(page):
+    """Stop the tab fetching bytes no scraper will ever look at.
+
+    Cuts peak memory substantially on image-heavy product grids, and shortens
+    page loads as a side effect. Best-effort: a browser that will not accept
+    the command still works, just heavier.
+    """
+    try:
+        await page.send(zd.cdp.network.enable())
+        await page.send(zd.cdp.network.set_blocked_ur_ls(urls=BLOCKED_PATTERNS))
+        return True
+    except Exception as e:
+        print(f"[common] resource blocking unavailable: {type(e).__name__}: {e}")
+        return False
+
+
 async def wait_for(page, predicate_js, timeout=6.0, interval=0.25):
     """Poll a JS boolean expression until it is true, or the budget runs out.
 
