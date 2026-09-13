@@ -1,9 +1,14 @@
+import asyncio
 import urllib.parse
 import json
 
 import zendriver as zd
 
 from . import common
+
+# How long set_location leaves swiggy.com loaded before handing the tab back.
+# A duration rather than a condition on purpose -- see set_location.
+SESSION_BOOTSTRAP = 2.0
 
 # Pincode-to-coordinate mapping for location injection
 PINCODE_COORDINATES = {
@@ -75,15 +80,14 @@ async def set_location(page, location):
             print(f"[Instamart] geolocation override unavailable: {type(e).__name__}")
 
         await page.get("https://www.swiggy.com/instamart")
-        # This navigation is what makes the cookie below stick: it establishes
-        # the swiggy.com origin and lets the page negotiate its WAF token. Both
-        # show up as cookies on the document, so wait for one to exist instead
-        # of sleeping through the two seconds it used to be guessed at.
-        await common.wait_for(
-            page,
-            "document.readyState !== 'loading' && document.cookie.length > 0",
-            timeout=2.0,
-        )
+        # A flat two seconds, deliberately. The page spends them bootstrapping
+        # its session -- negotiating the WAF token and resolving a store from
+        # the geolocation override -- and the tab is closed the moment this
+        # function returns. #12 swapped the sleep for "some cookie
+        # exists", which is true almost at once: live, Instamart then answered
+        # 3 of 4 searches with an empty grid, and 4 of 4 with the sleep back.
+        # Only replace this with a condition measured to cover that bootstrap.
+        await asyncio.sleep(SESSION_BOOTSTRAP)
 
         # The cookie Swiggy's address picker writes, in the shape it writes it
         # (URL-encoded JSON, not raw JSON).
@@ -167,11 +171,10 @@ async def search(page, search_term):
 
     async def attempt():
         # A tab already sitting on the origin carries the session this
-        # navigation exists to create. Under the pooled tabs in main.py that is
-        # now rare, because release blanks the tab to about:blank -- what
-        # actually skips the warmup is intercept_json's own per-origin cookie
-        # check against the shared browser profile, which pooling does not
-        # affect. Kept because it is still correct, and free when it does hit.
+        # navigation exists to create. Every scrape starts on a fresh
+        # about:blank tab, so in practice it is intercept_json's per-origin
+        # cookie check against the shared browser profile that skips the
+        # warmup. Kept because it is still correct, and free when it does hit.
         warmup = None if "swiggy.com" in (page.url or "") else "https://www.swiggy.com/instamart"
         return await common.intercept_json(
             page,
