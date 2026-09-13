@@ -1,12 +1,12 @@
 """QuickCom API layer.
 
-One headless Chromium serves every request, and two costs dominate a search:
-the per-platform tab and the scrape behind it. This module attacks both.
+One headless Chromium serves every request, and the scrape behind each
+platform is the cost that dominates a search. This module pays it as rarely,
+and shows it as early, as it can.
 
-  * Tabs are pooled and reused rather than opened per platform per search. A
-    fresh target costs a renderer spin-up plus the CDP round trips to install
-    the stealth script, enable Network and push the resource blocklist -- paid
-    six times on every search under the old create-per-scrape model.
+  * Every scrape gets a fresh tab, at most MAX_CONCURRENT_TABS open at once.
+    Reusing tabs saved ~33ms apiece but carried one platform's page state into
+    the next, which broke Zepto against the live site -- see TabPool.
   * Identical concurrent queries collapse onto a single scrape, so two users
     asking for "milk" at the same moment cost one round of traffic, not two.
   * Results stream to the browser per platform as they land, so the user sees
@@ -57,12 +57,9 @@ LOCATION_TIMEOUT = float(os.environ.get("LOCATION_TIMEOUT", "25"))
 SEARCH_CACHE_TTL = float(os.environ.get("SEARCH_CACHE_TTL", "120"))
 SEARCH_CACHE_MAX = 32
 
-# A pooled tab parked on about:blank still costs a renderer process. Close the
-# ones nothing has asked for in this long, so an idle box drifts back down to
-# the browser alone while a busy one keeps its tabs warm.
-TAB_IDLE_TTL = float(os.environ.get("TAB_IDLE_TTL", "300"))
-TAB_REAP_INTERVAL = 60.0
-TAB_RECYCLE_TIMEOUT = 6.0
+# How long a finished tab gets to close. Its slot is only handed on once it
+# has, so a close that hangs must not be allowed to strand the slot.
+TAB_CLOSE_TIMEOUT = 6.0
 
 # query -> (expires_at, {platform_key: ScrapeResult})
 _pool_cache = {}
@@ -120,29 +117,30 @@ Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8 });
 # --------------------------------------------------------------------------
 
 class TabPool:
-    """A fixed set of reusable, pre-configured Chromium tabs.
+    """A cap on how many Chromium tabs are open at once, each one fresh.
 
-    Opening a tab is not free: a new target costs a renderer spin-up plus three
-    CDP round trips (stealth script, Network.enable, the URL blocklist) before
-    a scraper can do anything with it. Under create-per-scrape that was paid
-    six times per search and thrown away six times per search. The pool pays it
-    once per slot instead and hands the same tabs back.
+    Every lease opens a new tab and closes it on release. Tabs were briefly
+    reused instead -- blanked to about:blank between leases -- to skip the
+    setup cost of a new target, measured at a median of 33ms. It was not worth
+    it. A tab carries state across navigations that blanking does not clear:
+    sessionStorage for every origin it has visited, and CDP overrides such as
+    the geolocation Instamart's set_location installs. Against the live sites,
+    with reuse Zepto loaded its search page and then never booted on about half
+    of all searches -- an empty body and no API call -- and with a fresh tab
+    per lease it went 8 for 8. Which piece of carried state trips it was not
+    isolated; carrying none is what measured clean.
 
-    A semaphore is the concurrency cap -- a scraper that is running is, by
-    construction, holding a slot -- and warm tabs are a stack drawn from only
-    when there is one. Nothing is opened until a search actually arrives, and
-    the stack is popped from the hot end so a box that only ever runs one
-    search at a time keeps reusing one tab and lets the rest age out.
+    The semaphore is the concurrency cap, and a slot is only handed on once the
+    previous tab has actually closed, so the browser never holds more than
+    `size` tabs.
     """
 
-    __slots__ = ("_browser", "_size", "_slots", "_warm", "_recycling")
+    __slots__ = ("_browser", "_slots", "_closing")
 
     def __init__(self, browser, size):
         self._browser = browser
-        self._size = size
         self._slots = asyncio.Semaphore(size)
-        self._warm = []  # (page, released_at), oldest first
-        self._recycling = set()
+        self._closing = set()
 
     async def _open(self):
         page = await self._browser.get("about:blank", new_tab=True)
@@ -155,106 +153,41 @@ class TabPool:
 
     @asynccontextmanager
     async def lease(self):
-        """Borrow a ready tab, blocking until one is free."""
+        """Borrow a fresh, configured tab, blocking until a slot is free."""
         await self._slots.acquire()
-        page = self._warm.pop()[0] if self._warm else None
-        if page is None:
-            try:
-                page = await self._open()
-            except Exception:
-                # Hand the slot back or the pool shrinks permanently.
-                self._slots.release()
-                raise
+        try:
+            page = await self._open()
+        except BaseException:
+            # Hand the slot back or the pool shrinks permanently.
+            self._slots.release()
+            raise
         try:
             yield page
         finally:
             self._release(page)
 
     def _release(self, page):
-        # Recycling is deliberately off the finishing caller's critical path:
-        # blanking the tab must not delay the response it just produced. The
-        # task is parked on the pool so it cannot be garbage collected
-        # mid-flight, which would strand the slot for the process's lifetime.
-        t = asyncio.create_task(self._recycle(page))
-        self._recycling.add(t)
-        t.add_done_callback(self._recycling.discard)
+        # Closing is deliberately off the finishing caller's critical path: it
+        # must not delay the response the tab just produced. The task is parked
+        # on the pool so it cannot be garbage collected mid-flight, which would
+        # strand the slot for the process's lifetime.
+        t = asyncio.create_task(self._close(page))
+        self._closing.add(t)
+        t.add_done_callback(self._closing.discard)
 
-    async def _recycle(self, page):
-        """Return a tab to the pool, blanked and stripped of handlers.
-
-        Blanking drops the site's DOM and JS heap -- the bulk of what a loaded
-        product grid costs -- so an idle pool is cheap. Clearing handlers stops
-        a scraper that died mid-interception from leaking its CDP callbacks
-        into whatever platform borrows the tab next, which under pooling would
-        be a correctness bug and not merely a leak.
-        """
+    async def _close(self, page):
         try:
-            page.remove_handlers()
-            await asyncio.wait_for(page.get("about:blank"), timeout=TAB_RECYCLE_TIMEOUT)
+            await asyncio.wait_for(page.close(), timeout=TAB_CLOSE_TIMEOUT)
         except Exception as e:
-            print(f"[pool] discarding tab that would not reset: {type(e).__name__}: {e}")
-            try:
-                await page.close()
-            except Exception:
-                pass
-            page = None
-        if page is not None:
-            self._warm.append((page, time.monotonic()))
-        # Released last: a waiter that woke before the tab was back would open
-        # a second one and quietly grow the pool past its size.
-        self._slots.release()
-
-    async def prewarm(self):
-        """Open every tab up front, so no user pays for building them.
-
-        The pool is otherwise lazy, which means the first search of a cold
-        process builds all four tabs on the critical path. Doing it at startup
-        moves that off the first request; the reaper still takes them back if
-        the search never comes.
-        """
-        async def claim():
-            async with self.lease():
-                pass
-
-        await asyncio.gather(*[claim() for _ in range(self._size)],
-                             return_exceptions=True)
-
-    async def reap(self):
-        """Close tabs nothing has borrowed for TAB_IDLE_TTL.
-
-        Keeps the warm-tab win across a burst of searches without holding four
-        renderer processes open through the quiet hours between them. Leases
-        pop the freshest tab, so the stale ones collect at the front of the
-        stack and everything before the first live entry is staler still.
-        """
-        cutoff = time.monotonic() - TAB_IDLE_TTL
-        stale = []
-        while self._warm and self._warm[0][1] < cutoff:
-            stale.append(self._warm.pop(0)[0])
-        for page in stale:
-            try:
-                await page.close()
-            except Exception as e:
-                print(f"[pool] error closing idle tab: {type(e).__name__}: {e}")
+            print(f"[pool] error closing tab: {type(e).__name__}: {e}")
+        finally:
+            # Released last: a waiter woken before the tab was gone would open
+            # another and briefly run the browser past its cap.
+            self._slots.release()
 
     async def close(self):
-        for t in list(self._recycling):
+        for t in list(self._closing):
             t.cancel()
-        warm, self._warm = self._warm, []
-        for page, _ in warm:
-            try:
-                await page.close()
-            except Exception:
-                pass
-
-
-async def _reap_tabs_forever(pool):
-    while True:
-        await asyncio.sleep(TAB_REAP_INTERVAL)
-        try:
-            await pool.reap()
-        except Exception as e:
-            print(f"[pool] reaper error: {type(e).__name__}: {e}")
 
 
 # --------------------------------------------------------------------------
@@ -496,14 +429,11 @@ async def lifespan(app: FastAPI):
     browser = await zd.start(config=stealth_config)
     app.state.browser = browser
     app.state.pool = TabPool(browser, MAX_CONCURRENT_TABS)
-    app.state.reaper = asyncio.create_task(_reap_tabs_forever(app.state.pool))
-    await app.state.pool.prewarm()
-    print(f"Browser started successfully! (pool of {MAX_CONCURRENT_TABS} tabs)")
+    print(f"Browser started successfully! (up to {MAX_CONCURRENT_TABS} tabs at once)")
 
     yield
 
     print("Stopping browser...")
-    app.state.reaper.cancel()
     await app.state.pool.close()
     await browser.stop()
 

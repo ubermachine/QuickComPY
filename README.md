@@ -94,6 +94,9 @@ confirms the change, reporting the city it resolved to.
   polling for the thing actually being awaited. The DOM scraper waits for the
   product count to *stabilise* rather than for the first card — Amazon streams
   its grid in, and reading on first sight captured four products out of forty.
+  The exception is Instamart's `set_location`, which keeps a flat two seconds:
+  the condition that replaced it came true before Swiggy had bootstrapped its
+  session, and three in four live searches came back empty.
 - **Short-lived result cache**: Re-sorting or re-filtering reuses the scraped
   pool for `SEARCH_CACHE_TTL` seconds (default 120) instead of hitting all six
   platforms again -- a re-sort drops from ~17s to under 0.1s, and it removes
@@ -109,18 +112,12 @@ confirms the change, reporting the city it resolved to.
   The slowest platform is routinely three times the fastest, and under the
   batch endpoint every user paid that worst case. `/api/search` is unchanged
   for callers that want one JSON body.
-- **Pooled browser tabs**: A tab is not free — a new target costs a renderer
-  spin-up plus the CDP round trips to install the stealth script, enable
-  Network and push the resource blocklist, and that was paid and thrown away
-  six times per search. Tabs are now leased from a pool, blanked on release
-  (which drops the site's DOM and JS heap) and reused. The pool's size is also
-  the concurrency cap, so there is no separate semaphore to keep in step with
-  it, and tabs idle for `TAB_IDLE_TTL` are closed so a quiet box drifts back
-  down to the browser alone. Worth keeping the size of this in proportion:
-  building a tab measured at a median of 33ms against a warm local browser, so
-  the saving is around 200ms on a six-platform search — real, but a rounding
-  error next to the scrape itself. The streaming endpoint and the local
-  re-sorting below are where the time actually goes.
+- **A fresh tab per scrape**: Each platform's scrape opens its own tab and
+  closes it afterwards, at most `MAX_CONCURRENT_TABS` at once. Tabs were briefly
+  pooled and reused to skip the ~33ms a new target costs, but a tab carries state
+  across navigations — sessionStorage, CDP overrides — and against the live sites
+  Zepto stalled on about half of all searches until each scrape got a clean tab
+  again. A clean tab is worth 33ms.
 - **One scrape per question**: Identical queries arriving together collapse
   onto a single in-flight scrape rather than each starting their own round of
   traffic at the platforms. A client that hangs up does not cancel the scrape
@@ -201,7 +198,6 @@ That is the whole change: `main.py` and the frontend both read the registry.
 | `SEARCH_TIMEOUT` | `60` | Per-platform search ceiling, seconds. |
 | `LOCATION_TIMEOUT` | `25` | Per-platform location ceiling, seconds. |
 | `SEARCH_CACHE_TTL` | `120` | Seconds a scraped pool is reused for re-sorting. `0` disables. |
-| `TAB_IDLE_TTL` | `300` | Seconds an unused pooled tab is kept warm before being closed. |
 
 ## Memory
 
@@ -225,9 +221,7 @@ when `BLOCK_ASSETS` is on, with images disabled in Blink itself rather than only
 blocked at the network layer. Since the table's own finding is that peak tracks
 *renderer process count*, and site isolation is what multiplies that count per
 origin, the flags should move peak down — but treat that as a prediction until
-someone re-runs the measurement on a real box. The tab pool cuts the other way
-by a smaller amount: up to `MAX_CONCURRENT_TABS` tabs now persist between
-searches, though blanked to `about:blank` and closed after `TAB_IDLE_TTL`.
+someone re-runs the measurement on a real box.
 
 Chromium is also told not to throttle background tabs
 (`--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`,
@@ -323,11 +317,9 @@ The repository includes a `render.yaml` Blueprint. Simply connect your GitHub re
 
 - **API Interception > HTML Scraping**: Platforms like Swiggy and Zepto heavily obfuscate their HTML and use AWS WAF. QuickCom attaches `page.on('response')` CDP listeners to intercept the clean JSON payloads from internal APIs, bypassing DOM instability.
 - **Single Browser Instance**: Instead of opening and closing browsers per request, `main.py` initializes a single global Zendriver instance that lives for the lifetime of the FastAPI app, drastically reducing latency and memory overhead.
-- **Pooled, blanked tabs**: Tabs are leased from a fixed pool rather than
-  created per platform per search. Release clears the tab's CDP handlers before
-  returning it — under pooling a scraper that died mid-interception would
-  otherwise leak its callbacks into whichever platform borrowed the tab next,
-  which is a correctness bug and not merely a leak.
+- **A clean tab per scrape**: No tab outlives the scrape it was opened for, so
+  no platform inherits another's sessionStorage, CDP overrides or leftover
+  event handlers.
 - **Stealth Initialization**: Locations are injected directly into `localStorage`, `sessionStorage`, and CDP Cookies via headless scripts, avoiding fragile UI interactions like clicking "Change Location" modals.
 
 ## License
