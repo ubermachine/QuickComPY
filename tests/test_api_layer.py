@@ -504,6 +504,32 @@ async def test_a_platform_that_refuses_a_location_does_not_fail_the_rest(stub_pl
     assert out["blinkit"] is True
 
 
+async def test_a_scrape_that_straddles_a_location_change_is_neither_cached_nor_joined(stub_platforms):
+    """Its prices are for the old pincode, so it must not outlive the change."""
+    browser = FakeBrowser()
+    # Room for both scrapes at once, so set_location never queues for a tab.
+    main.app.state.pool = main.TabPool(browser, 2 * len(main.KEYS))
+    for stub in stub_platforms.values():
+        stub.delay = 0.2
+
+    old = asyncio.create_task(main._gather_pools("milk"))
+    await asyncio.sleep(0.05)
+    await main.set_location(main.LocationRequest(location="400001"))
+    new = asyncio.create_task(main._gather_pools("milk"))
+
+    await old
+    assert main._cache_get("milk") is None, "old-location prices were cached after the change"
+
+    # The old scrape has finished; its cleanup must not have evicted the scrape
+    # that replaced it, or this client would start a third round of traffic.
+    joiner = asyncio.create_task(main._gather_pools("milk"))
+    await asyncio.gather(new, joiner)
+    for key, stub in stub_platforms.items():
+        # `pages` counts searches only; set_location also bumps `calls`.
+        assert len(stub.pages) == 2, f"{key}: expected the old scrape and one new one"
+    assert main._cache_get("milk") is not None, "the new-location scrape should cache"
+
+
 async def test_stream_chunks_leave_the_app_as_they_land(stub_platforms):
     """The point of the endpoint is incrementality, so assert it at the wire.
 
