@@ -197,6 +197,21 @@ _SET_PINCODE_JS = """
 """
 
 
+# A loaded amazon.in document is in the tab.
+_LANDED_JS = (
+    "location.hostname.indexOf('amazon.in') !== -1"
+    " && document.readyState === 'complete'"
+)
+
+# Chrome's error when the document an evaluate was running in is replaced.
+_NAVIGATED_AWAY = "navigated or closed"
+
+# Further tries at the address change after the landing page navigates out from
+# under one. Bounded, so a page that never settles still fails well inside the
+# API layer's location timeout.
+_NAVIGATION_RETRIES = 2
+
+
 async def set_location(page, location):
     """Set the delivery pincode through Amazon's own address-change endpoint.
 
@@ -207,19 +222,22 @@ async def set_location(page, location):
     print(f"[Amazon] Setting delivery pincode to {pincode}")
     try:
         await page.get("https://www.amazon.in/")
-        # Amazon's landing page redirects and hydrates for a moment; evaluating
-        # straight after get() races it and the CDP target vanishes mid-call.
-        # What we are actually waiting for is the redirect to have landed on
-        # amazon.in and that document to have finished loading -- usually well
-        # inside the 2.5s this used to sleep flat, and still allowed all of it
-        # when the landing page is slow.
-        await common.wait_for(
-            page,
-            "location.hostname.indexOf('amazon.in') !== -1"
-            " && document.readyState === 'complete'",
-            timeout=2.5,
-        )
-        raw = await page.evaluate(_SET_PINCODE_JS % pincode, await_promise=True)
+        # Amazon's landing page redirects and hydrates for a moment, and an
+        # evaluate still in flight when it does dies with "Inspected target
+        # navigated or closed". Waiting for a loaded amazon.in document narrows
+        # that window but cannot close it -- the pre-redirect document passes
+        # the same check -- so when the redirect still lands mid-call, wait for
+        # the new document and send the address change again. It sets a
+        # pincode, so sending it twice is harmless.
+        for attempt in range(_NAVIGATION_RETRIES + 1):
+            await common.wait_for(page, _LANDED_JS, timeout=2.5)
+            try:
+                raw = await page.evaluate(_SET_PINCODE_JS % pincode, await_promise=True)
+                break
+            except Exception as e:
+                if _NAVIGATED_AWAY not in str(e) or attempt == _NAVIGATION_RETRIES:
+                    raise
+                print(f"[Amazon] Landing page navigated mid-call; retrying ({attempt + 1})")
         try:
             data = json.loads(str(raw))
         except (ValueError, TypeError):

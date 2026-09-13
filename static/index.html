@@ -314,6 +314,11 @@
 
         function resetLocation() {
             isLocationSet = false;
+            // Detach any search still streaming in. Left alone, its `done`
+            // would run finish() and lock the location inputs reopened below.
+            searchSeq++;
+            stopStream();
+            $('loading-overlay').style.display = 'none';
             POOLS = {};
             searchDone = true;
             $('location-section').style.display = 'block';
@@ -416,6 +421,9 @@
                         POOLS[d.service] = { pool: d.pool || d.products || [], status: d.status, message: d.message };
                         renderColumn(d.service);
                         describeView();
+                        // Submitting disabled sort/filter because there was
+                        // nothing to sort; now there is, so let them go live.
+                        setInputsDisabled(true, true);
                         $('loading-text').innerText =
                             `Searching... ${Object.keys(POOLS).length} of ${SERVICES.length} vendors in`;
                     } catch (e) { /* a malformed frame must not kill the stream */ }

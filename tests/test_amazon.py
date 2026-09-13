@@ -12,6 +12,7 @@ if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
 
 import pytest
+from zendriver.core.connection import ProtocolException
 
 from backend_py.scrapers import amazon
 
@@ -38,6 +39,60 @@ def test_unknown_location_falls_back():
 def test_five_digit_number_is_not_a_pincode():
     """Indian pincodes are exactly six digits."""
     assert amazon.resolve_pincode("12345") == amazon.DEFAULT_PINCODE
+
+
+# ---------------------------------------------------------------------------
+# set_location
+# ---------------------------------------------------------------------------
+
+_ACCEPTED = '{"status": 200, "updated": true, "successful": true, "city": "GREATER NOIDA"}'
+
+
+class LandingPage:
+    """A tab whose first `navigations` address-change calls a redirect cuts off."""
+
+    def __init__(self, navigations):
+        self.navigations = navigations
+        self.address_calls = 0
+
+    async def get(self, url, **_kw):
+        return self
+
+    async def evaluate(self, expression, **_kw):
+        if expression.startswith("!!("):
+            return True  # common.wait_for's readiness probe
+        self.address_calls += 1
+        if self.address_calls <= self.navigations:
+            raise ProtocolException(
+                {"message": "Inspected target navigated or closed", "code": -32000}
+            )
+        return _ACCEPTED
+
+
+async def test_set_location_survives_the_landing_page_redirect():
+    """Seen live: the redirect landing mid-call left a flaky [ERR] Amazon badge."""
+    page = LandingPage(navigations=1)
+    assert await amazon.set_location(page, "201306") is True
+    assert page.address_calls == 2
+
+
+async def test_set_location_gives_up_on_a_page_that_never_settles():
+    page = LandingPage(navigations=99)
+    assert await amazon.set_location(page, "201306") is False
+    assert page.address_calls == amazon._NAVIGATION_RETRIES + 1
+
+
+async def test_set_location_does_not_retry_an_unrelated_failure():
+    class Broken(LandingPage):
+        async def evaluate(self, expression, **_kw):
+            if expression.startswith("!!("):
+                return True
+            self.address_calls += 1
+            raise RuntimeError("connection lost")
+
+    page = Broken(navigations=0)
+    assert await amazon.set_location(page, "201306") is False
+    assert page.address_calls == 1, "only a navigation is worth sending the call again for"
 
 
 # ---------------------------------------------------------------------------

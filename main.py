@@ -71,6 +71,21 @@ _pool_cache = {}
 # rather than starting a second round of traffic at the platforms.
 _inflight = {}
 
+# Bumped whenever the delivery location changes. A scrape's prices belong to
+# the location that was set when it started, so one that straddles a change
+# must neither be cached nor joined by a search made after it.
+_location_epoch = 0
+
+
+def _invalidate_searches():
+    """Forget every result, and every scrape in flight, for the old location."""
+    global _location_epoch
+    _location_epoch += 1
+    _pool_cache.clear()
+    # Detached rather than cancelled: clients already waiting on those scrapes
+    # still get their answer, but nobody new joins them.
+    _inflight.clear()
+
 
 def _cache_get(key):
     entry = _pool_cache.get(key)
@@ -342,10 +357,11 @@ class _Scrape:
     traffic at the platforms.
     """
 
-    __slots__ = ("cache_key", "tasks", "all")
+    __slots__ = ("cache_key", "epoch", "tasks", "all")
 
     def __init__(self, pool, cache_key, q):
         self.cache_key = cache_key
+        self.epoch = _location_epoch
         # Created slowest-first: see _scrape_order.
         self.tasks = {
             svc: asyncio.create_task(search_svc(pool, svc, q))
@@ -362,8 +378,10 @@ class _Scrape:
                 print(f"Service {svc} failed with exception: {e}")
                 pools[svc] = common.ScrapeResult([], common.ERROR, str(e))
         # Only worth caching if something actually succeeded; caching a round
-        # of blocks would keep serving them for the whole TTL.
-        if any(p.status == common.OK for p in pools.values()):
+        # of blocks would keep serving them for the whole TTL. And only if the
+        # location did not change underneath it, or these prices are wrong.
+        if (self.epoch == _location_epoch
+                and any(p.status == common.OK for p in pools.values())):
             _cache_put(self.cache_key, pools)
         return pools
 
@@ -375,7 +393,14 @@ def _scrape_for(pool, cache_key, q):
         return scrape
     scrape = _Scrape(pool, cache_key, q)
     _inflight[cache_key] = scrape
-    scrape.all.add_done_callback(lambda _t, k=cache_key: _inflight.pop(k, None))
+
+    def forget(_task):
+        # Only if the entry is still ours: a location change may have replaced
+        # it with a scrape for the new location, which must stay joinable.
+        if _inflight.get(cache_key) is scrape:
+            del _inflight[cache_key]
+
+    scrape.all.add_done_callback(forget)
     return scrape
 
 
@@ -531,12 +556,16 @@ async def services():
 
 @app.post("/api/set-location")
 async def set_location(body: LocationRequest):
-    # Cached pools are location-specific; a new pincode makes them wrong.
-    _pool_cache.clear()
+    # Cached pools and in-flight scrapes are location-specific; a new pincode
+    # makes them wrong. Invalidated on both sides of the change: before, so no
+    # new search joins a scrape for the old location, and after, so nothing
+    # scraped while the platforms were half-moved gets cached.
+    _invalidate_searches()
     pool = app.state.pool
     results = await asyncio.gather(*[
         set_loc_svc(pool, key, body.location) for key in KEYS
     ], return_exceptions=True)
+    _invalidate_searches()
 
     out = {}
     for key, res in zip(KEYS, results):
