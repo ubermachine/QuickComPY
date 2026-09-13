@@ -116,7 +116,11 @@ confirms the change, reporting the city it resolved to.
   (which drops the site's DOM and JS heap) and reused. The pool's size is also
   the concurrency cap, so there is no separate semaphore to keep in step with
   it, and tabs idle for `TAB_IDLE_TTL` are closed so a quiet box drifts back
-  down to the browser alone.
+  down to the browser alone. Worth keeping the size of this in proportion:
+  building a tab measured at a median of 33ms against a warm local browser, so
+  the saving is around 200ms on a six-platform search — real, but a rounding
+  error next to the scrape itself. The streaming endpoint and the local
+  re-sorting below are where the time actually goes.
 - **One scrape per question**: Identical queries arriving together collapse
   onto a single in-flight scrape rather than each starting their own round of
   traffic at the platforms. A client that hangs up does not cancel the scrape
