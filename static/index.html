@@ -4,12 +4,22 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>QuickCom Search</title>
+    <meta name="theme-color" content="#0f172a">
+    <!-- Inline, so the browser's automatic /favicon.ico request never happens. -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>%E2%9A%A1</text></svg>">
+    <!-- The stylesheet is render-blocking and the font files live on a second
+         origin, so open both connections now rather than after the CSS parses. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Inter', sans-serif;
+            /* A real fallback stack: text paints immediately on the system
+               font instead of waiting out the webfont round trip. */
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            background-attachment: fixed;
             color: #f8fafc;
             min-height: 100vh;
             padding: 2rem;
@@ -44,7 +54,7 @@
         select option { background: #1e293b; color: #f8fafc; }
         .filter-group { flex: 1; display: flex; flex-direction: column; gap: 0.5rem; min-width: 150px; }
         .filter-group label { color: #cbd5e1; font-size: 0.8rem; font-weight: 600; }
-        .filter-note { color: #94a3b8; font-size: 0.85em; margin-top: -0.5rem; margin-bottom: 1rem; }
+        .filter-note { color: #94a3b8; font-size: 0.85em; margin-top: -0.5rem; margin-bottom: 1rem; min-height: 1.2em; }
         .discount-pct { color: #34d399; font-weight: 700; font-size: 0.8em; }
         input[type="text"]::placeholder { color: #94a3b8; }
         input[type="text"]:focus { border-color: #3b82f6; }
@@ -84,13 +94,26 @@
         .bg-jiomart { background: linear-gradient(90deg, #3b82f6, #2563eb); }
         .bg-zepto { background: linear-gradient(90deg, #8b5cf6, #6d28d9); }
         .bg-instamart { background: linear-gradient(90deg, #f97316, #ea580c); }
+        .bg-amazon { background: linear-gradient(90deg, #ff9900, #e47911); }
         .vendor-count { color: #94a3b8; font-size: 0.85em; margin-top: 0.25rem; }
 
-        /* Glass Cards */
-        .glass-card { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 16px; transition: transform 0.2s, box-shadow 0.2s; display: flex; flex-direction: column; height: 100%; }
+        /* Cards.
+           No backdrop-filter: the only thing behind a card is the body's own
+           static gradient, so blurring it produces something the eye cannot
+           tell from a flat translucent fill -- while forcing a separate
+           compositing layer and a backdrop sample for every one of ~48 cards.
+           A slightly more opaque fill buys the same look for nothing.
+           content-visibility lets the browser skip layout and paint for the
+           cards scrolled off the bottom, which on six columns is most of them. */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.07); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px; padding: 16px; transition: transform 0.2s, box-shadow 0.2s;
+            display: flex; flex-direction: column; height: 100%;
+            content-visibility: auto; contain-intrinsic-size: auto 300px;
+        }
         .glass-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(0,0,0,0.3); border-color: rgba(255, 255, 255, 0.2); }
         .product-img { width: 100%; height: 140px; object-fit: contain; border-radius: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.9); padding: 8px; }
-        .product-title { font-weight: 600; font-size: 1.05em; line-height: 1.3; margin-bottom: 8px; color: #f8fafc; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .product-title { font-weight: 600; font-size: 1.05em; line-height: 1.3; margin-bottom: 8px; color: #f8fafc; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .product-meta { color: #cbd5e1; font-size: 0.8em; margin-bottom: 8px; }
         .price-row { display: flex; align-items: center; gap: 8px; margin-top: auto; }
         .current-price { font-size: 1.25em; font-weight: 800; color: #34d399; }
@@ -103,6 +126,19 @@
         .status-icon { display: block; font-size: 1.5em; margin-bottom: 0.4rem; }
         .vendor-count.warn { color: #fcd34d; }
         .empty-state { text-align: center; color: #94a3b8; font-style: italic; padding: 2rem; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed rgba(255,255,255,0.1); }
+
+        /* A column still being scraped. Results stream in one platform at a
+           time, so the grid is up and filling long before the slowest lands. */
+        .skeleton { border-radius: 12px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.06); height: 300px; animation: pulse 1.4s ease-in-out infinite; }
+        .skeleton + .skeleton { height: 300px; }
+        @keyframes pulse { 0%, 100% { opacity: 0.45; } 50% { opacity: 0.85; } }
+        .vendor-count.pending { color: #93c5fd; }
+
+        @media (prefers-reduced-motion: reduce) {
+            .spinner { animation: none; }
+            .skeleton { animation: none; }
+            .glass-card, .primary-btn, .preset-btn { transition: none; }
+        }
 
         @media (max-width: 1024px) {
             #results-container { grid-template-columns: repeat(2, 1fr); }
@@ -193,9 +229,12 @@
         let SERVICES = ["blinkit", "instamart", "bigbasket", "jiomart", "zepto"];
         let DISPLAY_NAMES = { blinkit: "Blinkit", instamart: "Swiggy Instamart", bigbasket: "BigBasket", jiomart: "JioMart", zepto: "Zepto" };
         let BRAND_COLORS = {};
+        let MAX_PRODUCTS = 8;
         let isLocationSet = false;
 
-        async function loadServices() {
+        const $ = id => document.getElementById(id);
+
+        const servicesReady = (async function loadServices() {
             try {
                 const res = await fetch('/api/services');
                 if(!res.ok) return;
@@ -208,40 +247,40 @@
                     DISPLAY_NAMES[s.key] = s.label;
                     BRAND_COLORS[s.key] = `linear-gradient(90deg, ${s.colorFrom}, ${s.colorTo})`;
                 }
+                if(data.maxProducts) MAX_PRODUCTS = data.maxProducts;
                 // A custom property, not an inline grid-template-columns: an
                 // inline value would override the responsive media queries.
-                document.getElementById('results-container')
-                    .style.setProperty('--vendor-cols', SERVICES.length);
+                $('results-container').style.setProperty('--vendor-cols', SERVICES.length);
             } catch (e) {
                 // Fall back to the hardcoded list above.
             }
-        }
-        loadServices();
+        })();
 
         function setPincode(code) {
-            if(!isLocationSet) document.getElementById('pincode-input').value = code;
+            if(!isLocationSet) $('pincode-input').value = code;
         }
 
         function setInputsDisabled(locDisabled, searchDisabled) {
-            document.getElementById('pincode-input').disabled = locDisabled;
-            const presetBtns = document.querySelectorAll('.preset-btn');
-            presetBtns.forEach(btn => btn.disabled = locDisabled);
-            document.getElementById('set-loc-btn').disabled = locDisabled;
+            $('pincode-input').disabled = locDisabled;
+            document.querySelectorAll('.preset-btn').forEach(btn => btn.disabled = locDisabled);
+            $('set-loc-btn').disabled = locDisabled;
 
-            document.getElementById('search-input').disabled = searchDisabled;
-            document.getElementById('search-btn').disabled = searchDisabled;
-            document.getElementById('sort-select').disabled = searchDisabled;
-            document.getElementById('discount-select').disabled = searchDisabled;
+            $('search-input').disabled = searchDisabled;
+            $('search-btn').disabled = searchDisabled;
+            // Sort and filter are answered from data already in the page, so
+            // they stay live even while a fresh search is still streaming in.
+            $('sort-select').disabled = searchDisabled && !hasResults();
+            $('discount-select').disabled = searchDisabled && !hasResults();
         }
 
         async function submitLocation() {
-            const loc = document.getElementById('pincode-input').value;
+            const loc = $('pincode-input').value;
             if(!loc) return;
 
             setInputsDisabled(true, true);
-            document.getElementById('loading-overlay').style.display = 'block';
-            document.getElementById('loading-text').innerText = 'Initializing vendor sessions... This may take up to 15 seconds.';
-            document.getElementById('results-container').style.display = 'none';
+            $('loading-overlay').style.display = 'block';
+            $('loading-text').innerText = 'Initializing vendor sessions... This may take up to 15 seconds.';
+            $('results-container').style.display = 'none';
 
             try {
                 const res = await fetch('/api/set-location', {
@@ -251,95 +290,162 @@
                 });
                 const data = await res.json();
 
-                document.getElementById('current-loc-text').innerText = loc;
-                const badgesDiv = document.getElementById('vendor-badges');
-                badgesDiv.innerHTML = '';
+                $('current-loc-text').innerText = loc;
+                // One assignment: `innerHTML +=` in a loop reparses everything
+                // already there on each pass.
+                $('vendor-badges').innerHTML = SERVICES.map(svc => {
+                    const name = escapeHTML(DISPLAY_NAMES[svc] || svc);
+                    return data[svc]
+                        ? `<span class="badge-ok">[OK] ${name}</span>`
+                        : `<span class="badge-err">[ERR] ${name} Failed</span>`;
+                }).join('');
 
-                for(const svc of SERVICES) {
-                    const name = DISPLAY_NAMES[svc] || svc;
-                    if(data[svc]) {
-                        badgesDiv.innerHTML += `<span class="badge-ok">[OK] ${name}</span>`;
-                    } else {
-                        badgesDiv.innerHTML += `<span class="badge-err">[ERR] ${name} Failed</span>`;
-                    }
-                }
-
-                document.getElementById('location-section').style.display = 'none';
-                document.getElementById('status-container').style.display = 'block';
+                $('location-section').style.display = 'none';
+                $('status-container').style.display = 'block';
                 isLocationSet = true;
                 setInputsDisabled(true, false);
             } catch (e) {
                 alert('Error setting location');
                 setInputsDisabled(false, true);
             } finally {
-                document.getElementById('loading-overlay').style.display = 'none';
+                $('loading-overlay').style.display = 'none';
             }
         }
 
         function resetLocation() {
             isLocationSet = false;
-            document.getElementById('location-section').style.display = 'block';
-            document.getElementById('status-container').style.display = 'none';
-            document.getElementById('results-container').style.display = 'none';
+            POOLS = {};
+            $('location-section').style.display = 'block';
+            $('status-container').style.display = 'none';
+            $('results-container').style.display = 'none';
             setInputsDisabled(false, true);
-            document.getElementById('search-input').value = '';
+            $('search-input').value = '';
         }
 
         function currentView() {
             return {
-                sort: document.getElementById('sort-select').value,
-                minDiscount: parseInt(document.getElementById('discount-select').value, 10) || 0
+                sort: $('sort-select').value,
+                minDiscount: parseInt($('discount-select').value, 10) || 0
             };
         }
 
-        // Changing sort or filter re-runs the query. The backend caches the
-        // scraped pool briefly, so this returns almost instantly rather than
-        // hitting all six platforms again.
-        function onViewChange() {
-            const query = document.getElementById('search-input').value;
-            if(query && !document.getElementById('search-btn').disabled) submitSearch();
+        // ------------------------------------------------------------------
+        // Results state
+        //
+        // The API sends every ranked candidate it found (`pool`) alongside the
+        // page of them it would show. Keeping the pool here is what makes sort
+        // and filter instant: they are a re-render of data already in the page,
+        // not another request.
+        // ------------------------------------------------------------------
+        let POOLS = {};          // svc -> { pool, status, message }
+        let searchSeq = 0;       // guards against a stale stream finishing late
+        let activeStream = null;
+
+        function hasResults() {
+            return Object.keys(POOLS).length > 0;
         }
 
-        function describeView(data) {
-            const { sort, minDiscount } = currentView();
-            const shown = SERVICES.reduce((n, s) => n + ((data[s] && data[s].products) || []).length, 0);
-            const matched = SERVICES.reduce((n, s) => n + ((data[s] && data[s].matched) || 0), 0);
-            const bits = [];
-            if(minDiscount > 0) bits.push(`filtered to ${minDiscount}%+ off`);
-            if(sort === 'discount') bits.push('sorted by biggest discount');
-            if(matched > shown) bits.push(`showing top ${shown} of ${matched} matches`);
-            document.getElementById('filter-note').innerText = bits.length ? bits.join(' \u00b7 ') : '';
+        // Mirrors common.apply_view on the server: filter, then a stable sort
+        // so equally-discounted items keep their relevance order.
+        function applyView(pool, sort, minDiscount) {
+            let list = pool || [];
+            if(minDiscount > 0) list = list.filter(p => (p.discountPercent || 0) >= minDiscount);
+            if(sort === 'discount') {
+                list = list.slice().sort((a, b) => (b.discountPercent || 0) - (a.discountPercent || 0));
+            }
+            return list;
+        }
+
+        function onViewChange() {
+            if(!hasResults()) return;
+            renderAll();
+        }
+
+        function stopStream() {
+            if(activeStream) { activeStream.close(); activeStream = null; }
         }
 
         async function submitSearch() {
-            const query = document.getElementById('search-input').value;
+            const query = $('search-input').value;
             if(!query) return;
-            const { sort, minDiscount } = currentView();
+            await servicesReady;
+
+            const seq = ++searchSeq;
+            stopStream();
+            POOLS = {};
 
             setInputsDisabled(true, true);
-            document.getElementById('loading-overlay').style.display = 'block';
-            document.getElementById('loading-text').innerText = `Searching for '${query}' across all vendors...`;
-            document.getElementById('results-container').style.display = 'none';
+            $('loading-overlay').style.display = 'block';
+            $('loading-text').innerText = `Searching for '${query}' across all vendors...`;
+            $('filter-note').innerText = '';
+            renderAll();                                  // skeletons, immediately
+            $('results-container').style.display = 'grid';
 
+            const { sort, minDiscount } = currentView();
+            const params = new URLSearchParams({ q: query, sort: sort, min_discount: minDiscount });
+
+            const finish = () => {
+                if(seq !== searchSeq) return;
+                stopStream();
+                $('loading-overlay').style.display = 'none';
+                setInputsDisabled(true, false);
+                renderAll();
+            };
+
+            // Stream the columns in. A search is only ever as fast as its
+            // slowest platform; this way the user waits for the slowest *column*
+            // instead of for all six.
+            if(typeof EventSource !== 'undefined') {
+                let sawResult = false;
+                const es = new EventSource(`/api/search/stream?${params}`);
+                activeStream = es;
+
+                es.addEventListener('result', ev => {
+                    if(seq !== searchSeq) return;
+                    sawResult = true;
+                    try {
+                        const d = JSON.parse(ev.data);
+                        POOLS[d.service] = { pool: d.pool || d.products || [], status: d.status, message: d.message };
+                        renderColumn(d.service);
+                        describeView();
+                        $('loading-text').innerText =
+                            `Searching... ${Object.keys(POOLS).length} of ${SERVICES.length} vendors in`;
+                    } catch (e) { /* a malformed frame must not kill the stream */ }
+                });
+                es.addEventListener('done', () => finish());
+                es.onerror = () => {
+                    if(seq !== searchSeq) return;
+                    // EventSource retries by itself; if it died before a single
+                    // column arrived, fall back to the one-shot endpoint.
+                    stopStream();
+                    if(sawResult) finish();
+                    else fetchAll(seq, params, finish);
+                };
+                return;
+            }
+
+            fetchAll(seq, params, finish);
+        }
+
+        async function fetchAll(seq, params, finish) {
             try {
-                const params = new URLSearchParams({ q: query, sort: sort, min_discount: minDiscount });
                 const res = await fetch(`/api/search?${params}`);
                 const data = await res.json();
-
-                renderResults(data);
-                describeView(data);
-
-                document.getElementById('results-container').style.display = 'grid';
+                if(seq !== searchSeq) return;
+                for(const svc of SERVICES) {
+                    const raw = data[svc];
+                    if(!raw) continue;
+                    const r = Array.isArray(raw) ? { products: raw, status: raw.length ? 'ok' : 'empty' } : raw;
+                    POOLS[svc] = { pool: r.pool || r.products || [], status: r.status, message: r.message };
+                }
             } catch (e) {
-                alert('Error performing search');
+                if(seq === searchSeq) alert('Error performing search');
             } finally {
-                document.getElementById('loading-overlay').style.display = 'none';
-                setInputsDisabled(true, false);
+                finish();
             }
         }
 
-        // Allow enter key in search
-        document.getElementById('search-input').addEventListener('keypress', function(e) {
+        $('search-input').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') submitSearch();
         });
 
@@ -363,91 +469,105 @@
 
         // An empty column has very different meanings -- the store genuinely has
         // nothing, or it served us a bot challenge. Say which.
-        function statusNote(svc, result) {
-            const name = DISPLAY_NAMES[svc] || svc;
-            const el = document.createElement('div');
-            const detail = {
-                blocked: ['&#128683;', `${name} blocked the request (bot protection). Try again in a moment.`, 'status-blocked'],
-                timeout: ['&#9203;', `${name} did not respond in time.`, 'status-timeout'],
-                error:   ['&#9888;', `Could not reach ${name}.`, 'status-error'],
-            }[result.status];
+        const STATUS_DETAIL = {
+            blocked: ['&#128683;', name => `${name} blocked the request (bot protection). Try again in a moment.`, 'status-blocked'],
+            timeout: ['&#9203;', name => `${name} did not respond in time.`, 'status-timeout'],
+            error:   ['&#9888;', name => `Could not reach ${name}.`, 'status-error'],
+        };
 
-            if(!detail) {
-                el.className = 'empty-state';
-                el.innerText = 'No products found';
-                return el;
-            }
+        function statusNoteHTML(svc, status) {
+            const detail = STATUS_DETAIL[status];
+            if(!detail) return `<div class="empty-state">No products found</div>`;
             const [icon, text, cls] = detail;
-            el.className = `status-note ${cls}`;
-            el.innerHTML = `<span class="status-icon">${icon}</span>${escapeHTML(text)}`;
-            return el;
+            return `<div class="status-note ${cls}"><span class="status-icon">${icon}</span>${escapeHTML(text(DISPLAY_NAMES[svc] || svc))}</div>`;
         }
 
-        function renderResults(data) {
-            const container = document.getElementById('results-container');
-            container.innerHTML = '';
+        function cardHTML(p) {
+            const img = escapeHTML(p.imageUrl || '');
+            // loading/decoding keep a grid of ~48 thumbnails off the critical
+            // path; a dead CDN URL removes its own broken-image box.
+            const imgTag = img
+                ? `<img src="${img}" class="product-img" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" onerror="this.remove()">`
+                : '';
+            const orig = escapeHTML(p.originalPrice || '');
+            const badge = p.discount || (p.discountPercent > 0 ? `${Math.round(p.discountPercent)}% OFF` : '');
+            return `<div class="glass-card">`
+                + imgTag
+                + `<div class="product-title">${escapeHTML(p.name || 'Unknown')}</div>`
+                + `<div class="product-meta">${escapeHTML(p.quantity || '1 item')} | Time: ${escapeHTML(p.deliveryTime || 'N/A')}</div>`
+                + `<div class="price-row"><span class="current-price">${escapeHTML(p.price || 'N/A')}</span>`
+                + (orig ? `<span class="original-price">${orig}</span>` : '')
+                + `</div>`
+                + (badge ? `<div><span class="discount-badge">${escapeHTML(badge)}</span></div>` : '')
+                + `</div>`;
+        }
 
+        // One innerHTML assignment per column rather than an appendChild per
+        // card: ~48 separate insertions is ~48 chances to invalidate layout.
+        function columnHTML(svc) {
+            const entry = POOLS[svc];
+            const brand = BRAND_COLORS[svc]
+                ? `<div class="brand-badge" style="background:${BRAND_COLORS[svc]}">${escapeHTML(DISPLAY_NAMES[svc] || svc)}</div>`
+                : `<div class="brand-badge bg-${escapeHTML(svc)}">${escapeHTML(DISPLAY_NAMES[svc] || svc)}</div>`;
+
+            if(!entry) {
+                return `<div class="vendor-header">${brand}<div class="vendor-count pending">Searching…</div></div>`
+                     + `<div class="skeleton"></div><div class="skeleton"></div>`;
+            }
+
+            const { sort, minDiscount } = currentView();
+            const matched = applyView(entry.pool, sort, minDiscount);
+            const view = matched.slice(0, MAX_PRODUCTS);
+
+            // Mirrors the server: a filter that excludes everything is not the
+            // platform failing.
+            let status = entry.status;
+            if(view.length === 0 && (entry.pool || []).length) status = 'empty';
+
+            const count = view.length
+                ? `<div class="vendor-count">Found ${view.length} items</div>`
+                : `<div class="vendor-count warn">${STATUS_LABEL[status] || 'Unavailable'}</div>`;
+
+            const body = view.length ? view.map(cardHTML).join('') : statusNoteHTML(svc, status);
+            return `<div class="vendor-header">${brand}${count}</div>${body}`;
+        }
+
+        function renderColumn(svc) {
+            let col = document.getElementById(`col-${svc}`);
+            if(!col) { renderAll(); return; }
+            col.innerHTML = columnHTML(svc);
+        }
+
+        function renderAll() {
+            const container = $('results-container');
+            // Build off-document, attach once: one reflow for the whole grid.
+            const frag = document.createDocumentFragment();
             for(const svc of SERVICES) {
-                // The API returns {products, status, message}; tolerate a bare
-                // array in case an older backend is serving.
-                const raw = data[svc];
-                const result = Array.isArray(raw) ? { products: raw, status: raw.length ? 'ok' : 'empty' } : (raw || { products: [], status: 'error' });
-                const products = result.products || [];
-
                 const col = document.createElement('div');
                 col.className = 'vendor-col';
-
-                const header = document.createElement('div');
-                header.className = 'vendor-header';
-                const badge = document.createElement('div');
-                badge.className = 'brand-badge';
-                badge.textContent = DISPLAY_NAMES[svc] || svc;
-                if(BRAND_COLORS[svc]) { badge.style.background = BRAND_COLORS[svc]; }
-                else { badge.classList.add(`bg-${svc}`); }
-                const count = document.createElement('div');
-                count.className = products.length ? 'vendor-count' : 'vendor-count warn';
-                count.textContent = products.length ? `Found ${products.length} items` : STATUS_LABEL[result.status] || 'Unavailable';
-                header.appendChild(badge);
-                header.appendChild(count);
-                col.appendChild(header);
-
-                if(products.length === 0) {
-                    col.appendChild(statusNote(svc, result));
-                } else {
-                    for(const p of products) {
-                        const name = escapeHTML(p.name || 'Unknown');
-                        const price = escapeHTML(p.price || 'N/A');
-                        const orig = escapeHTML(p.originalPrice || '');
-                        const qty = escapeHTML(p.quantity || '1 item');
-                        const delivery = escapeHTML(p.deliveryTime || 'N/A');
-                        const discount = escapeHTML(p.discount || '');
-                        const img = escapeHTML(p.imageUrl || '');
-
-                        const card = document.createElement('div');
-                        card.className = 'glass-card';
-
-                        let html = '';
-                        if(img) html += `<img src="${img}" class="product-img">`;
-                        html += `<div class="product-title">${name}</div>`;
-                        html += `<div class="product-meta">${qty} | Time: ${delivery}</div>`;
-
-                        html += `<div class="price-row">`;
-                        html += `<span class="current-price">${price}</span>`;
-                        if(orig) html += `<span class="original-price">${orig}</span>`;
-                        html += `</div>`;
-
-                        if(discount || p.discountPercent > 0) {
-                            const badge = discount || `${Math.round(p.discountPercent)}% OFF`;
-                            html += `<div><span class="discount-badge">${escapeHTML(badge)}</span></div>`;
-                        }
-
-                        card.innerHTML = html;
-                        col.appendChild(card);
-                    }
-                }
-
-                container.appendChild(col);
+                col.id = `col-${svc}`;
+                col.innerHTML = columnHTML(svc);
+                frag.appendChild(col);
             }
+            container.replaceChildren(frag);
+            describeView();
+        }
+
+        function describeView() {
+            const { sort, minDiscount } = currentView();
+            let shown = 0, matched = 0;
+            for(const svc of SERVICES) {
+                const entry = POOLS[svc];
+                if(!entry) continue;
+                const m = applyView(entry.pool, sort, minDiscount);
+                matched += m.length;
+                shown += Math.min(m.length, MAX_PRODUCTS);
+            }
+            const bits = [];
+            if(minDiscount > 0) bits.push(`filtered to ${minDiscount}%+ off`);
+            if(sort === 'discount') bits.push('sorted by biggest discount');
+            if(matched > shown) bits.push(`showing top ${shown} of ${matched} matches`);
+            $('filter-note').innerText = bits.length ? bits.join(' · ') : '';
         }
     </script>
 </body>

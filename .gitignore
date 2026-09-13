@@ -38,3 +38,8 @@ coverage/
 .temp/
 __pycache__/
 *.pyc
+
+# Local virtualenvs
+.venv/
+venv/
+env/

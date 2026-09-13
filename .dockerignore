@@ -1,13 +1,48 @@
+# The running app is main.py, backend_py/, static/ and requirements.txt.
+# Everything else in this repo is development residue -- and every byte of it
+# is build context uploaded to the daemon on every single build.
+
 .git
-__pycache__
+.gitignore
+.venv
+venv
+env
+**/__pycache__
 *.pyc
-*.html
-*.png
-*.json
-_debug*
-test_*
-screenshots/
-streamlit/
-frontend/
-backend/
+*.pyo
 .pytest_cache/
+.devcontainer
+.codewhale
+.deepseek
+Dockerfile
+.dockerignore
+README.md
+LICENSE
+render.yaml
+pytest.ini
+
+# Captured pages, screenshots and API dumps kept from scraper debugging --
+# several megabytes of them. The only HTML the app serves is its own index.
+**/*.html
+!static/index.html
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.json
+screenshots/
+
+# Dev-only scripts and the test suite: nothing the app imports.
+tests/
+requirements-dev.txt
+test_*
+_*.py
+_*.txt
+backend/
+bb_network_monitor.py
+jm_test_quick.py
+backend_py/debug_*.py
+backend_py/test_*.py
+backend_py/trace_*.py
+backend_py/inspect_*.py
+backend_py/update_*.py
+backend_py/extract_*.py
