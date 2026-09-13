@@ -1,5 +1,4 @@
 import urllib.parse
-import asyncio
 import re
 import zendriver as zd
 
@@ -41,7 +40,14 @@ async def set_location(page, location):
         await page.send(zd.cdp.network.set_cookie(name='bb_lon', value='77.4855', domain=domain, path='/'))
         try:
             await page.get("https://www.bigbasket.com/")
-            await asyncio.sleep(1)
+            # Same as the cookies above, but localStorage is origin-scoped: it
+            # only reaches BigBasket once BigBasket's document is loaded. That
+            # is the whole content of the second this used to sleep.
+            await common.wait_for(
+                page,
+                "location.hostname.indexOf('bigbasket.com') !== -1 && !!window.localStorage",
+                timeout=1.0,
+            )
             await page.evaluate(f"""
                 try {{ localStorage.setItem('bb_pincode', '{pincode}'); }} catch(e){{}}
                 try {{ localStorage.setItem('bb_location', '{pincode}'); }} catch(e){{}}

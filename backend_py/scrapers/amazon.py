@@ -15,7 +15,6 @@ endpoint behind the "Deliver to" control accepts a bare pincode and answers with
 the resolved city, which is what set_location verifies against.
 """
 
-import asyncio
 import json
 import re
 import urllib.parse
@@ -78,6 +77,14 @@ JSON.stringify((function () {
   }
   return out;
 })())
+"""
+
+# Stabilisation probe for the settle loop: how many cards are on the page right
+# now. Amazon streams its grid in, and this is the cheap way to notice it has
+# stopped -- the alternative is re-running the extractor above on every poll and
+# shipping the whole product array over CDP to compare its length.
+_COUNT_JS = """
+document.querySelectorAll('[data-component-type="s-search-result"]').length
 """
 
 # Pack size is embedded in the title ("... Body Lotion 600ml", "Powder 1kg").
@@ -202,7 +209,16 @@ async def set_location(page, location):
         await page.get("https://www.amazon.in/")
         # Amazon's landing page redirects and hydrates for a moment; evaluating
         # straight after get() races it and the CDP target vanishes mid-call.
-        await asyncio.sleep(2.5)
+        # What we are actually waiting for is the redirect to have landed on
+        # amazon.in and that document to have finished loading -- usually well
+        # inside the 2.5s this used to sleep flat, and still allowed all of it
+        # when the landing page is slow.
+        await common.wait_for(
+            page,
+            "location.hostname.indexOf('amazon.in') !== -1"
+            " && document.readyState === 'complete'",
+            timeout=2.5,
+        )
         raw = await page.evaluate(_SET_PINCODE_JS % pincode, await_promise=True)
         try:
             data = json.loads(str(raw))
@@ -229,6 +245,7 @@ async def search(page, search_term):
     async def attempt_scoped(url):
         result = await common.scrape_dom(
             page, tag="Amazon", navigate=url, extract=_EXTRACT_JS,
+            card_count=_COUNT_JS,
         )
         if result.status == common.OK:
             result.products = extract_products(result.products)

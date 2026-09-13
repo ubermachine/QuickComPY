@@ -1,24 +1,10 @@
 import urllib.parse
-import asyncio
 import json
 import re
-import time
 
 import zendriver as zd
 
 from . import common
-
-async def wait_for_selector(page, selector, timeout=10):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            elem = await page.select(selector)
-            if elem:
-                return elem
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
-    return None
 
 # JioMart keeps the delivery location in two cookies plus a localStorage key.
 # Setting them directly is both faster and more reliable than driving the
@@ -198,6 +184,12 @@ async def search(page, search_term):
     print(f"[JioMart] Searching for: {search_term}")
 
     async def attempt():
+        # A tab already sitting on the origin carries the session this
+        # navigation exists to create. Under the pooled tabs in main.py that is
+        # now rare, because release blanks the tab to about:blank -- what
+        # actually skips the warmup is intercept_json's own per-origin cookie
+        # check against the shared browser profile, which pooling does not
+        # affect. Kept because it is still correct, and free when it does hit.
         warmup = None if "jiomart.com" in (page.url or "") else "https://www.jiomart.com/"
         return await common.intercept_json(
             page,

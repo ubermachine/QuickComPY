@@ -1,6 +1,5 @@
 import urllib.parse
-import asyncio
-import time
+
 import zendriver as zd
 
 from . import common
@@ -42,25 +41,16 @@ def resolve_coords(location):
             return v
     return LOCATION_COORDS['201301']
 
-async def wait_for_selector(page, selector, timeout=10):
-    start = time.time()
-    while time.time() - start < timeout:
+async def inject_location_cookies(page, pincode, lat, lon):
+    # Each domain gets its own guard: sharing one meant a failure on the first
+    # silently skipped the other two, and set_location then waits on the
+    # serviceability cookie reappearing to know the server has re-evaluated
+    # the location -- a stale copy left behind would answer for the old one.
+    for domain in ('.zepto.com', 'www.zepto.com', 'zepto.com'):
         try:
-            elem = await page.select(selector)
-            if elem:
-                return elem
+            await page.send(zd.cdp.network.delete_cookies(name='serviceability', domain=domain))
         except Exception:
             pass
-        await asyncio.sleep(0.5)
-    return None
-
-async def inject_location_cookies(page, pincode, lat, lon):
-    try:
-        await page.send(zd.cdp.network.delete_cookies(name='serviceability', domain='.zepto.com'))
-        await page.send(zd.cdp.network.delete_cookies(name='serviceability', domain='www.zepto.com'))
-        await page.send(zd.cdp.network.delete_cookies(name='serviceability', domain='zepto.com'))
-    except Exception:
-        pass
         
     domain = ".zepto.com"
     user_pos = f'{{"latitude":{lat},"longitude":{lon}}}'
@@ -87,38 +77,46 @@ async def set_location(page, location):
     _lon = str(coords['lon'])
     
     try:
-        # Establish domain session first
+        # Establish domain session first: the cookies below are injected by CDP
+        # against the zepto.com domain, and Chrome only keeps them once that
+        # origin is the one loaded in the tab.
         await page.get("https://www.zepto.com/")
-        await asyncio.sleep(1.5)
-        
+        await common.wait_for(
+            page,
+            "location.hostname.indexOf('zepto.com') !== -1 && document.readyState !== 'loading'",
+            timeout=1.5,
+        )
+
         # Inject coordinates and location cookies via CDP
         await inject_location_cookies(page, _pincode, _lat, _lon)
-        
-        # Reload so Zepto's server evaluates the new location cookies and sets serviceability cookie
+
+        # Reload so Zepto's server evaluates the new location cookies and sets
+        # the serviceability cookie. That cookie reappearing (it was deleted
+        # just above) is precisely what the wait is for, so wait for the thing
+        # itself rather than for a duration someone guessed it would take.
         await page.get("https://www.zepto.com/")
-        await asyncio.sleep(2)
-        
-        # Check serviceability and fall back if not serviceable
-        cookies = await page.send(zd.cdp.network.get_cookies())
+        cookie = await common.wait_for_cookie(page, 'serviceability', timeout=2.0)
+
+        # Absent means Zepto never told us, which we read as serviceable --
+        # exactly what the previous cookie scan concluded when it found none.
         serviceable = True
-        for c in cookies:
-            if c.name == 'serviceability':
-                val = urllib.parse.unquote(c.value).lower().replace(" ", "")
-                if '"serviceable":false' in val:
-                    serviceable = False
-                    break
-                
+        if cookie:
+            val = urllib.parse.unquote(cookie.value).lower().replace(" ", "")
+            if '"serviceable":false' in val:
+                serviceable = False
+
         if not serviceable:
             print(f"[Zepto] Location {location} is not serviceable from this IP. Falling back to Noida 201301.")
             _pincode = '201301'
             _lat = '28.5821195'
             _lon = '77.3266991'
             await inject_location_cookies(page, _pincode, _lat, _lon)
-            
-            # Reload again so server evaluates the fallback location
+
+            # Reload again so server evaluates the fallback location, and let it
+            # say so before handing the tab on.
             await page.get("https://www.zepto.com/")
-            await asyncio.sleep(2)
-            
+            await common.wait_for_cookie(page, 'serviceability', timeout=2.0)
+
         print(f"[Zepto] Location injected: pincode={_pincode}, lat={_lat}, lon={_lon}")
         return True
     except Exception as e:
@@ -208,7 +206,10 @@ async def search(page, search_term):
             match=lambda url: "api/v3/search" in url and "filters" not in url,
             parse=_parse,
             navigate=f"https://www.zepto.com/search?query={encoded}",
-            warmup="https://www.zepto.com/",
+            # Same short-circuit as Instamart and JioMart, and with the same
+            # caveat: pooled tabs are blanked on release, so in practice it is
+            # intercept_json's per-origin cookie check that skips the warmup.
+            warmup=None if "zepto.com" in (page.url or "") else "https://www.zepto.com/",
             before_navigate=set_cookies,
             timeout=15.0,
         )

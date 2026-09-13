@@ -1,5 +1,4 @@
 import urllib.parse
-import asyncio
 import json
 
 import zendriver as zd
@@ -76,7 +75,15 @@ async def set_location(page, location):
             print(f"[Instamart] geolocation override unavailable: {type(e).__name__}")
 
         await page.get("https://www.swiggy.com/instamart")
-        await asyncio.sleep(2)
+        # This navigation is what makes the cookie below stick: it establishes
+        # the swiggy.com origin and lets the page negotiate its WAF token. Both
+        # show up as cookies on the document, so wait for one to exist instead
+        # of sleeping through the two seconds it used to be guessed at.
+        await common.wait_for(
+            page,
+            "document.readyState !== 'loading' && document.cookie.length > 0",
+            timeout=2.0,
+        )
 
         # The cookie Swiggy's address picker writes, in the shape it writes it
         # (URL-encoded JSON, not raw JSON).
@@ -159,8 +166,12 @@ async def search(page, search_term):
     print(f"[Instamart] Searching for: {search_term}")
 
     async def attempt():
-        # set_location already parks us on swiggy.com; only pay for the warmup
-        # navigation when the WAF token has not been established yet.
+        # A tab already sitting on the origin carries the session this
+        # navigation exists to create. Under the pooled tabs in main.py that is
+        # now rare, because release blanks the tab to about:blank -- what
+        # actually skips the warmup is intercept_json's own per-origin cookie
+        # check against the shared browser profile, which pooling does not
+        # affect. Kept because it is still correct, and free when it does hit.
         warmup = None if "swiggy.com" in (page.url or "") else "https://www.swiggy.com/instamart"
         return await common.intercept_json(
             page,

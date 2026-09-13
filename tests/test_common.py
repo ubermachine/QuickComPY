@@ -522,3 +522,99 @@ def test_warmup_needed_when_no_cookies_yet():
 def test_warmup_needed_when_the_check_itself_fails():
     """Take the fast path only on positive evidence."""
     assert _run(common._needs_warmup(_CookiePage(None), "https://x.test")) is True
+
+
+# ---------------------------------------------------------------------------
+# Ranking is a hot loop (up to 40 products x 6 platforms per search), so the
+# scorer was refactored to hoist the query tokenisation out of it and index the
+# name once instead of scanning it per query token. The refactor is only
+# allowed if it is invisible: these compare it against the original algorithm,
+# transcribed below, over a corpus of the shapes the platforms actually return.
+# ---------------------------------------------------------------------------
+
+def _legacy_relevance_score(name, query):
+    """The pre-refactor scorer, kept verbatim as the reference."""
+    q = common._tokens(query)
+    if not q:
+        return 0.0
+    name_tokens = common._tokens(name)
+    if not name_tokens:
+        return 0.0
+    haystack = (name or "").lower()
+
+    score = 0.0
+    for t in q:
+        if t in name_tokens:
+            score += 1.0
+            idx = name_tokens.index(t)
+            score += 0.5 * (1.0 - idx / len(name_tokens))
+        elif t in haystack:
+            score += 0.5
+    if score == 0.0:
+        return 0.0
+    return score - min(len(name_tokens), 20) * 0.02
+
+
+_CORPUS = [
+    "Amul Gold Full Cream Milk",
+    "Amul Taaza Toned Fresh Milk 500 ml",
+    "Amul Masti Dahi",
+    "Let's Try Fruit Cake Rusk with Goodness of Wheat",
+    "Plum Vanilla Caramello Body Lotion | Cocoa Butter & Vitamin B5",
+    "Amul Unsalted Butter",
+    "Milk Milk Milk Chocolate Drink Mix",          # repeated token
+    "NIVEA Nourishing Body Milk 600ml Body Lotion",
+    "Sponsored Ad - Brawny Bear Peanut Butter",
+    "GAVYRATAN A2 Cow Skimmed Milk Powder 1kg | All Natural",
+    "Mother Dairy Classic Curd (Dahi) 400 g Cup",
+    "Milkybar Milky Bar Chocolate",                 # substring-only hits
+    "ब्रेड Brown Bread 400 g",                       # non-ASCII
+    "",
+    "   ",
+    "12345",
+]
+
+_QUERIES = [
+    "milk", "butter", "curd", "amul milk", "toned milk 500 ml", "MILK",
+    "milk milk", "chocolate", "bread", "shampoo", "", "   ", "of the and",
+    "a2 cow", "500", "milky",
+]
+
+
+@pytest.mark.parametrize("query", _QUERIES)
+def test_refactored_scores_match_the_original_exactly(query):
+    for name in _CORPUS:
+        assert common.relevance_score(name, query) == _legacy_relevance_score(name, query), (
+            f"score changed for {name!r} / {query!r}"
+        )
+
+
+@pytest.mark.parametrize("query", _QUERIES)
+def test_refactored_ranking_matches_the_original_order(query):
+    products = [{"name": n, "id": str(i)} for i, n in enumerate(_CORPUS)]
+
+    scored = [(_legacy_relevance_score(p["name"], query), i, p)
+              for i, p in enumerate(products)]
+    if all(s == 0.0 for s, _, _ in scored):
+        expected = products
+    else:
+        scored.sort(key=lambda t: (-t[0], t[1]))
+        expected = [p for _, _, p in scored]
+
+    assert common.rank_by_relevance(products, query) == expected
+
+
+def test_scoring_a_product_does_not_depend_on_query_token_order():
+    """Hoisting the query tokens must not have made the scorer stateful."""
+    first = common.relevance_score("Amul Gold Full Cream Milk", "milk")
+    for _ in range(3):
+        common.relevance_score("Something Else Entirely", "butter")
+    assert common.relevance_score("Amul Gold Full Cream Milk", "milk") == first
+
+
+def test_repeated_name_tokens_score_from_the_first_occurrence():
+    """`.index()` returned the first hit; the token index must agree."""
+    early = common.relevance_score("Milk Chocolate Drink Powder Mix", "milk")
+    late = common.relevance_score("Chocolate Drink Powder Mix Milk", "milk")
+    assert early > late
+    assert early == _legacy_relevance_score("Milk Chocolate Drink Powder Mix", "milk")

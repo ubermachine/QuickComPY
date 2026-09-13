@@ -1,0 +1,8 @@
+-r requirements.txt
+
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+# httpx drives the ASGI app in tests; beautifulsoup4 is used by the debugging
+# scripts in backend_py/ and at the repo root. Neither is imported by the app.
+httpx>=0.27.0
+beautifulsoup4>=4.12.0

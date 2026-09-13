@@ -103,8 +103,37 @@ confirms the change, reporting the city it resolved to.
   (Blinkit will lead a "milk" search with cake rusk). Results are re-ranked so
   on-topic items surface first — demoted, never dropped, since "curd"
   legitimately returns "Dahi" with no lexical overlap.
-- **Asynchronous & Concurrent**: Uses `asyncio.gather()` to fetch data from every platform at once, bounded by `MAX_CONCURRENT_TABS`; typically 12-16 seconds for six platforms.
-- **Memory Optimized**: Runs a single global Chromium browser instance via FastAPI Lifespan events. Memory footprint fits within a 512MB RAM constraint for free-tier deployments.
+- **Streamed results**: `/api/search/stream` sends each platform's column as
+  Server-Sent Events the moment that platform lands, so the page fills in
+  progressively instead of showing nothing until the slowest of six finishes.
+  The slowest platform is routinely three times the fastest, and under the
+  batch endpoint every user paid that worst case. `/api/search` is unchanged
+  for callers that want one JSON body.
+- **Pooled browser tabs**: A tab is not free — a new target costs a renderer
+  spin-up plus the CDP round trips to install the stealth script, enable
+  Network and push the resource blocklist, and that was paid and thrown away
+  six times per search. Tabs are now leased from a pool, blanked on release
+  (which drops the site's DOM and JS heap) and reused. The pool's size is also
+  the concurrency cap, so there is no separate semaphore to keep in step with
+  it, and tabs idle for `TAB_IDLE_TTL` are closed so a quiet box drifts back
+  down to the browser alone. Worth keeping the size of this in proportion:
+  building a tab measured at a median of 33ms against a warm local browser, so
+  the saving is around 200ms on a six-platform search — real, but a rounding
+  error next to the scrape itself. The streaming endpoint and the local
+  re-sorting below are where the time actually goes.
+- **One scrape per question**: Identical queries arriving together collapse
+  onto a single in-flight scrape rather than each starting their own round of
+  traffic at the platforms. A client that hangs up does not cancel the scrape
+  others are waiting on, and the result is still cached for the next caller.
+- **Sorting and filtering without a request**: Each platform's full ranked pool
+  is sent alongside the visible page of it, so changing sort order or minimum
+  discount is a re-render of data already in the browser — no round trip, no
+  spinner, no server-side re-sort. gzip makes the extra payload cheaper than
+  the request it removes.
+- **Asynchronous & Concurrent**: Every platform is scraped at once, bounded by
+  `MAX_CONCURRENT_TABS`; typically 12-16 seconds for all six to finish, though
+  with the streaming endpoint the first column lands in a small fraction of that.
+- **Memory Optimized**: Runs a single global Chromium browser instance via FastAPI Lifespan events.
 - **Modern Glassmorphism UI**: Beautiful, responsive Vanilla HTML/CSS interface with visual badges and dynamic grid layouts.
 
 ## Technology Stack
@@ -127,12 +156,14 @@ confirms the change, reporting the city it resolved to.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /api/services` | Platform registry (key, label, brand colours). The frontend reads this instead of hardcoding the list. |
+| `GET /api/services` | Platform registry (key, label, brand colours) plus `maxProducts`. The frontend reads this instead of hardcoding the list. |
 | `POST /api/set-location` | `{"location": "201306"}` — warms a session per platform. Returns `{platform: bool}`. |
-| `GET /api/search?q=` | Returns `{platform: {products, status, message, matched}}` for every platform. |
+| `GET /api/search?q=` | Returns `{platform: {products, pool, status, message, matched}}` for every platform, once all six have landed. |
+| `GET /api/search/stream?q=` | The same search as Server-Sent Events: one `result` event per platform as it lands, carrying that platform's object plus its `service` key, then a final `done`. |
 
-`/api/search` also accepts two optional view parameters. Both default to the
-original behaviour, so an unchanged call returns exactly what it always did:
+Both search endpoints accept the same two optional view parameters. Both
+default to the original behaviour, so an unchanged call returns exactly what it
+always did:
 
 | Param | Default | Meaning |
 |-------|---------|---------|
@@ -141,6 +172,11 @@ original behaviour, so an unchanged call returns exactly what it always did:
 
 `matched` reports how many of a platform's candidates passed the filter, so the
 UI can say "showing top 8 of 23" rather than implying there were only eight.
+
+`products` is the visible page; `pool` is every ranked candidate behind it, sent
+so the browser can re-sort and re-filter locally rather than asking again. The
+two overlap, but the overlap is identical text and gzip charges almost nothing
+for it — far less than a round trip per dropdown change.
 
 `status` is one of `ok`, `empty`, `blocked`, `timeout`, `error`.
 
@@ -165,6 +201,7 @@ That is the whole change: `main.py` and the frontend both read the registry.
 | `SEARCH_TIMEOUT` | `60` | Per-platform search ceiling, seconds. |
 | `LOCATION_TIMEOUT` | `25` | Per-platform location ceiling, seconds. |
 | `SEARCH_CACHE_TTL` | `120` | Seconds a scraped pool is reused for re-sorting. `0` disables. |
+| `TAB_IDLE_TTL` | `300` | Seconds an unused pooled tab is kept warm before being closed. |
 
 ## Memory
 
@@ -180,6 +217,23 @@ duration rather than reading it once at the end:
 Peak tracks the number of concurrent renderer processes, not page weight. Going
 to 6 is worse on both axes on a machine this size — the extra parallelism costs
 more in contention than it saves in waiting.
+
+**These numbers predate the current browser flags** and have not been re-measured
+since. Chromium is now launched with site isolation and the back/forward cache
+off (`--disable-features=site-per-process,IsolateOrigins,BackForwardCache`) and,
+when `BLOCK_ASSETS` is on, with images disabled in Blink itself rather than only
+blocked at the network layer. Since the table's own finding is that peak tracks
+*renderer process count*, and site isolation is what multiplies that count per
+origin, the flags should move peak down — but treat that as a prediction until
+someone re-runs the measurement on a real box. The tab pool cuts the other way
+by a smaller amount: up to `MAX_CONCURRENT_TABS` tabs now persist between
+searches, though blanked to `about:blank` and closed after `TAB_IDLE_TTL`.
+
+Chromium is also told not to throttle background tabs
+(`--disable-background-timer-throttling`, `--disable-backgrounding-occluded-windows`,
+`--disable-renderer-backgrounding`). Every tab we drive is a background tab, so
+left on, that throttling slows exactly the concurrent scrapes the pool exists to
+run.
 
 **This does not fit a 512MB host, and cannot be made to.** Chromium's per-renderer
 floor is the constraint, so the knob moves peak between roughly 1.6GB and 2.3GB
@@ -214,7 +268,8 @@ QuickCom/
 ├── main.py                    # FastAPI server & routes
 ├── Dockerfile                 # Optimized slim Docker image
 ├── render.yaml                # Render Blueprint deployment config
-├── requirements.txt           # Python Dependencies
+├── requirements.txt           # Runtime dependencies (what the image installs)
+├── requirements-dev.txt       # Test and debugging tools, not shipped
 └── README.md                  # Documentation
 ```
 
@@ -234,9 +289,12 @@ cd QuickComPY
 
 2. **Install Dependencies:**
 ```shell
-pip install -r requirements.txt
-playwright install chromium
+pip install -r requirements.txt        # to run the app
+pip install -r requirements-dev.txt    # to run the tests as well
 ```
+`requirements.txt` is runtime-only, so the production image does not carry
+pytest, httpx or beautifulsoup4. Chromium must be on the system; set
+`CHROME_PATH` if it is somewhere zendriver will not find it.
 
 3. **Run the Server:**
 ```shell
@@ -265,6 +323,11 @@ The repository includes a `render.yaml` Blueprint. Simply connect your GitHub re
 
 - **API Interception > HTML Scraping**: Platforms like Swiggy and Zepto heavily obfuscate their HTML and use AWS WAF. QuickCom attaches `page.on('response')` CDP listeners to intercept the clean JSON payloads from internal APIs, bypassing DOM instability.
 - **Single Browser Instance**: Instead of opening and closing browsers per request, `main.py` initializes a single global Zendriver instance that lives for the lifetime of the FastAPI app, drastically reducing latency and memory overhead.
+- **Pooled, blanked tabs**: Tabs are leased from a fixed pool rather than
+  created per platform per search. Release clears the tab's CDP handlers before
+  returning it — under pooling a scraper that died mid-interception would
+  otherwise leak its callbacks into whichever platform borrowed the tab next,
+  which is a correctness bug and not merely a leak.
 - **Stealth Initialization**: Locations are injected directly into `localStorage`, `sessionStorage`, and CDP Cookies via headless scripts, avoiding fragile UI interactions like clicking "Change Location" modals.
 
 ## License
