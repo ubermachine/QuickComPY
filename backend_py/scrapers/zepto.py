@@ -206,8 +206,9 @@ async def search(page, search_term):
             match=lambda url: "api/v3/search" in url and "filters" not in url,
             parse=_parse,
             navigate=f"https://www.zepto.com/search?query={encoded}",
-            # Same short-circuit as Instamart and JioMart: a tab already parked
-            # on the origin has the session the warmup load exists to create.
+            # Same short-circuit as Instamart and JioMart, and with the same
+            # caveat: pooled tabs are blanked on release, so in practice it is
+            # intercept_json's per-origin cookie check that skips the warmup.
             warmup=None if "zepto.com" in (page.url or "") else "https://www.zepto.com/",
             before_navigate=set_cookies,
             timeout=15.0,

@@ -2,8 +2,10 @@
 
 This one needs a real Chromium *and* real network access to zepto.com, so it is
 the only test here that can be prevented from running by the environment rather
-than by the code. Where that happens it skips: an environment without a browser
-is not a defect in the scraper.
+than by the code. It skips on either -- no browser to start, or no route to the
+origin -- because neither is a defect in the scraper. Everything past that point
+is asserted: a browser that can reach Zepto and still comes back without
+products fails.
 
 Everything the test waits on is bounded. An unbounded wait here does not fail
 one test, it hangs the entire pytest run -- which is exactly what used to

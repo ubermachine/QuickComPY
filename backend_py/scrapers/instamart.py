@@ -166,8 +166,12 @@ async def search(page, search_term):
     print(f"[Instamart] Searching for: {search_term}")
 
     async def attempt():
-        # set_location already parks us on swiggy.com; only pay for the warmup
-        # navigation when the WAF token has not been established yet.
+        # A tab already sitting on the origin carries the session this
+        # navigation exists to create. Under the pooled tabs in main.py that is
+        # now rare, because release blanks the tab to about:blank -- what
+        # actually skips the warmup is intercept_json's own per-origin cookie
+        # check against the shared browser profile, which pooling does not
+        # affect. Kept because it is still correct, and free when it does hit.
         warmup = None if "swiggy.com" in (page.url or "") else "https://www.swiggy.com/instamart"
         return await common.intercept_json(
             page,

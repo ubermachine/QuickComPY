@@ -189,6 +189,21 @@ class TabPool:
         # a second one and quietly grow the pool past its size.
         self._slots.release()
 
+    async def prewarm(self):
+        """Open every tab up front, so no user pays for building them.
+
+        The pool is otherwise lazy, which means the first search of a cold
+        process builds all four tabs on the critical path. Doing it at startup
+        moves that off the first request; the reaper still takes them back if
+        the search never comes.
+        """
+        async def claim():
+            async with self.lease():
+                pass
+
+        await asyncio.gather(*[claim() for _ in range(self._size)],
+                             return_exceptions=True)
+
     async def reap(self):
         """Close tabs nothing has borrowed for TAB_IDLE_TTL.
 
@@ -231,6 +246,35 @@ async def _reap_tabs_forever(pool):
 # Per-platform work
 # --------------------------------------------------------------------------
 
+# Observed scrape time per platform, as an exponential moving average.
+#
+# While the pool is smaller than the number of platforms, the order tasks queue
+# in *is* scheduling policy: the platforms that start last decide when the
+# search finishes. Starting the slowest first is the longest-processing-time
+# rule, and it shortens the tail directly -- registry order currently starts
+# Amazon last, and Amazon is the slowest of the six.
+_DURATIONS = {}
+_DURATION_ALPHA = 0.3
+
+
+def _record_duration(key, seconds):
+    previous = _DURATIONS.get(key)
+    _DURATIONS[key] = (
+        seconds if previous is None
+        else previous + _DURATION_ALPHA * (seconds - previous)
+    )
+
+
+def _scrape_order():
+    """Platform keys, slowest first by what we have actually measured.
+
+    A platform nobody has timed yet sorts first: finding out early that it is
+    expensive costs nothing, whereas keeping an expensive one at the back of
+    the queue costs its full duration on every search.
+    """
+    return sorted(KEYS, key=lambda k: -_DURATIONS.get(k, float("inf")))
+
+
 async def set_loc_svc(pool, key, location):
     print(f"Setting location for {key} to {location}")
     try:
@@ -252,9 +296,15 @@ async def search_svc(pool, key, search_term):
     "this product does not exist here".
     """
     print(f"Searching {key} for {search_term}")
-    started = time.monotonic()
+    queued_at = time.monotonic()
+    started = None
     try:
         async with pool.lease() as page:
+            # Timed from the lease rather than the call: waiting for a slot is
+            # queueing, and folding that in would make a platform look slow for
+            # having been scheduled late -- the very thing the estimate exists
+            # to fix, feeding itself.
+            started = time.monotonic()
             result = await asyncio.wait_for(
                 BY_KEY[key].module.search(page, search_term), timeout=SEARCH_TIMEOUT
             )
@@ -272,7 +322,14 @@ async def search_svc(pool, key, search_term):
     except Exception as e:
         print(f"Search error {key}: {type(e).__name__} - {e}")
         result = common.ScrapeResult([], common.ERROR, f"{type(e).__name__}: {e}")
-    print(f"[{key}] finished in {time.monotonic() - started:.1f}s ({result.status})")
+
+    now = time.monotonic()
+    if started is not None:
+        _record_duration(key, now - started)
+        print(f"[{key}] finished in {now - queued_at:.1f}s "
+              f"({now - started:.1f}s scraping) ({result.status})")
+    else:
+        print(f"[{key}] never got a tab after {now - queued_at:.1f}s ({result.status})")
     return key, result
 
 
@@ -289,8 +346,10 @@ class _Scrape:
 
     def __init__(self, pool, cache_key, q):
         self.cache_key = cache_key
+        # Created slowest-first: see _scrape_order.
         self.tasks = {
-            svc: asyncio.create_task(search_svc(pool, svc, q)) for svc in KEYS
+            svc: asyncio.create_task(search_svc(pool, svc, q))
+            for svc in _scrape_order()
         }
         self.all = asyncio.ensure_future(self._collect())
 
@@ -413,6 +472,7 @@ async def lifespan(app: FastAPI):
     app.state.browser = browser
     app.state.pool = TabPool(browser, MAX_CONCURRENT_TABS)
     app.state.reaper = asyncio.create_task(_reap_tabs_forever(app.state.pool))
+    await app.state.pool.prewarm()
     print(f"Browser started successfully! (pool of {MAX_CONCURRENT_TABS} tabs)")
 
     yield

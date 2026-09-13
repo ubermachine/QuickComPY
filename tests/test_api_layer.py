@@ -94,12 +94,12 @@ def product(name, price, mrp=None):
 
 @pytest.fixture
 def clean_state():
-    """Each test gets an empty cache and no in-flight scrapes."""
-    main._pool_cache.clear()
-    main._inflight.clear()
+    """Each test gets an empty cache, no in-flight scrapes, no timing history."""
+    for store in (main._pool_cache, main._inflight, main._DURATIONS):
+        store.clear()
     yield
-    main._pool_cache.clear()
-    main._inflight.clear()
+    for store in (main._pool_cache, main._inflight, main._DURATIONS):
+        store.clear()
 
 
 @pytest.fixture
@@ -559,3 +559,83 @@ async def test_services_carries_the_page_size_the_browser_slices_with():
     assert body["maxProducts"] == common.MAX_PRODUCTS
     assert [s["key"] for s in body["services"]] == main.KEYS
     assert "max-age" in response.headers["cache-control"]
+
+
+# ---------------------------------------------------------------------------
+# Scheduling
+# ---------------------------------------------------------------------------
+
+def test_unmeasured_platforms_are_scheduled_first(clean_state):
+    main._DURATIONS.update({k: 1.0 for k in main.KEYS[:-1]})
+    # The last platform has never been timed, so it must not stay at the back.
+    assert main._scrape_order()[0] == main.KEYS[-1]
+
+
+def test_platforms_are_scheduled_slowest_first(clean_state):
+    for i, key in enumerate(main.KEYS):
+        main._DURATIONS[key] = float(i)
+    assert main._scrape_order() == list(reversed(main.KEYS))
+
+
+def test_duration_is_an_average_not_the_last_reading(clean_state):
+    main._record_duration("blinkit", 10.0)
+    main._record_duration("blinkit", 0.0)
+    # One freak fast run must not convince us the platform is fast.
+    assert 0.0 < main._DURATIONS["blinkit"] < 10.0
+
+
+async def test_the_slowest_platform_is_started_first_next_time(stub_platforms):
+    """The tail of a search is whichever platforms had to queue for a tab."""
+    browser = FakeBrowser()
+    # Deliberately smaller than the platform count, so order decides the tail.
+    main.app.state.pool = main.TabPool(browser, 2)
+    slowest = main.KEYS[-1]
+    for key in main.KEYS:
+        stub_platforms[key].delay = 0.15 if key == slowest else 0.02
+
+    await main._gather_pools("milk")
+    assert main._scrape_order()[0] == slowest, (
+        "registry order starts the slowest platform last; it should not stay there"
+    )
+
+    main._pool_cache.clear()
+    order = []
+    original = main.search_svc
+
+    async def recording(pool, key, term):
+        order.append(key)
+        return await original(pool, key, term)
+
+    main.search_svc = recording
+    try:
+        await main._gather_pools("bread")
+    finally:
+        main.search_svc = original
+    assert order[0] == slowest
+
+
+async def test_queueing_time_is_not_counted_against_a_platform(stub_platforms):
+    """A platform must not look slow for having been scheduled late."""
+    browser = FakeBrowser()
+    main.app.state.pool = main.TabPool(browser, 1)  # everything queues
+    for stub in stub_platforms.values():
+        stub.delay = 0.05
+
+    await main._gather_pools("milk")
+    for key, seen in main._DURATIONS.items():
+        assert seen < 0.15, (
+            f"{key} recorded {seen:.2f}s for a 0.05s scrape -- queueing leaked in"
+        )
+
+
+async def test_prewarm_opens_the_pool_so_the_first_search_does_not():
+    browser = FakeBrowser()
+    pool = main.TabPool(browser, 3)
+    await pool.prewarm()
+    for _ in range(8):
+        await asyncio.sleep(0)
+
+    assert len(browser.tabs) == 3
+    async with pool.lease() as page:
+        assert page in browser.tabs, "a prewarmed tab should be handed straight out"
+    assert len(browser.tabs) == 3, "prewarming then leasing must not open a fourth"
