@@ -207,7 +207,7 @@ async def search(page, search_term):
             parse=_parse,
             navigate=f"https://www.zepto.com/search?query={encoded}",
             # Same short-circuit as Instamart and JioMart, and with the same
-            # caveat: pooled tabs are blanked on release, so in practice it is
+            # caveat: every scrape starts on a fresh tab, so in practice it is
             # intercept_json's per-origin cookie check that skips the warmup.
             warmup=None if "zepto.com" in (page.url or "") else "https://www.zepto.com/",
             before_navigate=set_cookies,

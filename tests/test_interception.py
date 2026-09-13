@@ -288,8 +288,8 @@ def test_each_empty_answer_restarts_the_grace_clock(monkeypatch):
 
 
 def test_handlers_are_removed_whatever_happens():
-    """Under a pooled tab a stray handler would follow the tab to the next
-    platform, so this is correctness and not just hygiene."""
+    """A stray handler keeps firing for the rest of the scrape's navigations and
+    leaks the closure holding its results, so this is not just hygiene."""
     page = FakePage().answer_with({"body": _payload()})
     _run(_intercept(page, timeout=5.0))
     assert page.handlers == {}

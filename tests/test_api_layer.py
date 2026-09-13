@@ -1,4 +1,4 @@
-"""Tests for the API layer in main.py -- tab pooling, caching, single-flight
+"""Tests for the API layer in main.py -- the tab cap, caching, single-flight
 and the streaming search endpoint.
 
 No browser is started: the pool is driven against a fake browser whose tabs
@@ -29,18 +29,9 @@ class FakePage:
     def __init__(self, tab_id):
         self.tab_id = tab_id
         self.url = "about:blank"
-        self.navigations = []
-        self.handler_clears = 0
         self.closed = False
-        self.reset_fails = False
-
-    def remove_handlers(self, event_type=None, handler=None):
-        self.handler_clears += 1
 
     async def get(self, url, **kwargs):
-        if self.reset_fails and url == "about:blank":
-            raise RuntimeError("renderer gone")
-        self.navigations.append(url)
         self.url = url
         return self
 
@@ -119,66 +110,57 @@ def stub_platforms(clean_state):
 # TabPool
 # ---------------------------------------------------------------------------
 
-async def test_pool_opens_lazily_and_reuses_the_same_tab():
+async def test_pool_opens_lazily_and_closes_every_tab_it_hands_out():
     browser = FakeBrowser()
     pool = main.TabPool(browser, 2)
     assert browser.tabs == [], "a pool must cost nothing until something leases"
 
-    async with pool.lease() as page:
-        first = page
-    # The recycle happens off the critical path; let it land.
+    async with pool.lease():
+        pass
+    # Closing happens off the critical path; let it land.
     for _ in range(5):
         await asyncio.sleep(0)
-
-    async with pool.lease() as page:
-        assert page is first, "the second lease should reuse the warm tab"
-    assert len(browser.tabs) == 1
+    assert browser.tabs[0].closed is True
 
 
-async def test_pool_caps_concurrency_at_its_size():
+async def test_no_tab_is_handed_to_a_second_scrape():
+    """Guards the #12 regression. Reused tabs carried one platform's page state
+    into the next, and live Zepto stalled on about half its searches until
+    every lease got a tab of its own again.
+    """
+    browser = FakeBrowser()
+    pool = main.TabPool(browser, 1)
+    leased = []
+    for _ in range(3):
+        async with pool.lease() as page:
+            leased.append(page)
+        for _ in range(5):
+            await asyncio.sleep(0)
+    assert len({id(p) for p in leased}) == 3, "a tab was reused across scrapes"
+    assert all(p.closed for p in leased)
+
+
+async def test_pool_caps_open_tabs_at_its_size():
     browser = FakeBrowser()
     pool = main.TabPool(browser, 2)
     live = 0
-    peak = 0
+    peak_live = 0
+    peak_open = 0
 
     async def worker():
-        nonlocal live, peak
+        nonlocal live, peak_live, peak_open
         async with pool.lease():
             live += 1
-            peak = max(peak, live)
+            peak_live = max(peak_live, live)
+            # Open until close() has actually run, not merely been scheduled:
+            # the cap is on tabs the browser holds.
+            peak_open = max(peak_open, sum(not t.closed for t in browser.tabs))
             await asyncio.sleep(0.02)
             live -= 1
 
     await asyncio.gather(*[worker() for _ in range(6)])
-    assert peak == 2
-    assert len(browser.tabs) == 2, "six scrapes should not have opened six tabs"
-
-
-async def test_recycled_tab_is_blanked_and_stripped_of_handlers():
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 1)
-    async with pool.lease() as page:
-        await page.get("https://example.com/search")
-    for _ in range(5):
-        await asyncio.sleep(0)
-
-    page = browser.tabs[0]
-    assert page.navigations[-1] == "about:blank", "a released tab must not keep the site loaded"
-    assert page.handler_clears >= 1, "stale CDP handlers would leak into the next platform"
-
-
-async def test_tab_that_will_not_reset_is_discarded_not_handed_back():
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 1)
-    async with pool.lease() as page:
-        page.reset_fails = True
-    for _ in range(5):
-        await asyncio.sleep(0)
-
-    assert browser.tabs[0].closed is True
-    async with pool.lease() as page:
-        assert page is not browser.tabs[0], "a tab we could not reset must be replaced"
-    assert len(browser.tabs) == 2
+    assert peak_live == 2
+    assert peak_open <= 2, "a slot was handed on before its tab had closed"
 
 
 async def test_failed_open_returns_the_slot_to_the_pool():
@@ -203,68 +185,27 @@ async def test_failed_open_returns_the_slot_to_the_pool():
         assert page is not None
 
 
-async def test_reap_closes_idle_tabs_but_keeps_fresh_ones(monkeypatch):
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 2)
+async def test_a_tab_that_will_not_close_still_returns_its_slot():
+    class StuckPage(FakePage):
+        async def close(self):
+            raise RuntimeError("renderer gone")
+
+    class StuckBrowser(FakeBrowser):
+        async def get(self, url, new_tab=False):
+            page = StuckPage(len(self.tabs))
+            self.tabs.append(page)
+            return page
+
+    pool = main.TabPool(StuckBrowser(), 1)
     async with pool.lease():
         pass
-    for _ in range(5):
-        await asyncio.sleep(0)
 
-    monkeypatch.setattr(main, "TAB_IDLE_TTL", 1000.0)
-    await pool.reap()
-    assert browser.tabs[0].closed is False, "a freshly used tab must survive the sweep"
+    async def lease_again():
+        async with pool.lease() as page:
+            return page
 
-    monkeypatch.setattr(main, "TAB_IDLE_TTL", -1.0)
-    await pool.reap()
-    assert browser.tabs[0].closed is True
-
-    # Capacity must survive the reap, or the pool shrinks every sweep.
-    async with pool.lease() as page:
-        assert page is not None
-    assert len(browser.tabs) == 2
-
-
-async def test_reap_leaves_capacity_intact_for_later_searches(monkeypatch):
-    """Reaping frees memory; it must not narrow how many scrapes can run."""
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 3)
-    monkeypatch.setattr(main, "TAB_IDLE_TTL", -1.0)
-
-    async def worker():
-        async with pool.lease():
-            await asyncio.sleep(0.01)
-
-    await asyncio.gather(*[worker() for _ in range(3)])
-    for _ in range(5):
-        await asyncio.sleep(0)
-    await pool.reap()
-
-    live = 0
-    peak = 0
-
-    async def counted():
-        nonlocal live, peak
-        async with pool.lease():
-            live += 1
-            peak = max(peak, live)
-            await asyncio.sleep(0.01)
-            live -= 1
-
-    await asyncio.gather(*[counted() for _ in range(3)])
-    assert peak == 3
-
-
-async def test_lease_prefers_a_warm_tab_over_opening_a_new_one():
-    """The whole point of the pool: never pay tab setup twice for one slot."""
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 4)
-    for _ in range(5):
-        async with pool.lease():
-            pass
-        for _ in range(5):
-            await asyncio.sleep(0)
-    assert len(browser.tabs) == 1, "serial searches must keep reusing one tab"
+    # A leaked slot would block here, and every later search with it.
+    assert await asyncio.wait_for(lease_again(), timeout=1.0) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -653,15 +594,3 @@ async def test_queueing_time_is_not_counted_against_a_platform(stub_platforms):
             f"{key} recorded {seen:.2f}s for a 0.05s scrape -- queueing leaked in"
         )
 
-
-async def test_prewarm_opens_the_pool_so_the_first_search_does_not():
-    browser = FakeBrowser()
-    pool = main.TabPool(browser, 3)
-    await pool.prewarm()
-    for _ in range(8):
-        await asyncio.sleep(0)
-
-    assert len(browser.tabs) == 3
-    async with pool.lease() as page:
-        assert page in browser.tabs, "a prewarmed tab should be handed straight out"
-    assert len(browser.tabs) == 3, "prewarming then leasing must not open a fourth"
