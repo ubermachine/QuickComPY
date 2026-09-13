@@ -1,5 +1,4 @@
 import urllib.parse
-import asyncio
 import json
 
 import zendriver as zd
@@ -76,7 +75,15 @@ async def set_location(page, location):
             print(f"[Instamart] geolocation override unavailable: {type(e).__name__}")
 
         await page.get("https://www.swiggy.com/instamart")
-        await asyncio.sleep(2)
+        # This navigation is what makes the cookie below stick: it establishes
+        # the swiggy.com origin and lets the page negotiate its WAF token. Both
+        # show up as cookies on the document, so wait for one to exist instead
+        # of sleeping through the two seconds it used to be guessed at.
+        await common.wait_for(
+            page,
+            "document.readyState !== 'loading' && document.cookie.length > 0",
+            timeout=2.0,
+        )
 
         # The cookie Swiggy's address picker writes, in the shape it writes it
         # (URL-encoded JSON, not raw JSON).

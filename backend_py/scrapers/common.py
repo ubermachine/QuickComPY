@@ -120,6 +120,42 @@ def _tokens(text):
     ]
 
 
+def _score_tokens(name, query_tokens):
+    """`relevance_score` with the query already tokenised.
+
+    Split out because ranking scores a forty-product pool against one query:
+    tokenising that query per product meant running the token regex and the
+    stopword filter forty times over for an identical answer. Indexing the name
+    once replaces the linear `list.index` scan the per-token loop was doing.
+    """
+    if not query_tokens:
+        return 0.0
+    name_tokens = _tokens(name)
+    if not name_tokens:
+        return 0.0
+    # First occurrence per token, which is exactly what `.index()` returned.
+    first_at = {}
+    for i, t in enumerate(name_tokens):
+        if t not in first_at:
+            first_at[t] = i
+    haystack = (name or "").lower()
+
+    score = 0.0
+    for t in query_tokens:
+        idx = first_at.get(t)
+        if idx is not None:
+            score += 1.0
+            score += 0.5 * (1.0 - idx / len(name_tokens))
+        elif t in haystack:
+            score += 0.5
+    if score == 0.0:
+        return 0.0
+
+    # Length penalty, capped so a very long title cannot go negative and end up
+    # below a genuine non-match.
+    return score - min(len(name_tokens), 20) * 0.02
+
+
 def relevance_score(name, query):
     """Score how well a product name answers the query.
 
@@ -136,28 +172,7 @@ def relevance_score(name, query):
     Dahi" with no lexical overlap at all, and discarding that would be worse
     than ranking it low.
     """
-    q = _tokens(query)
-    if not q:
-        return 0.0
-    name_tokens = _tokens(name)
-    if not name_tokens:
-        return 0.0
-    haystack = (name or "").lower()
-
-    score = 0.0
-    for t in q:
-        if t in name_tokens:
-            score += 1.0
-            idx = name_tokens.index(t)
-            score += 0.5 * (1.0 - idx / len(name_tokens))
-        elif t in haystack:
-            score += 0.5
-    if score == 0.0:
-        return 0.0
-
-    # Length penalty, capped so a very long title cannot go negative and end up
-    # below a genuine non-match.
-    return score - min(len(name_tokens), 20) * 0.02
+    return _score_tokens(name, _tokens(query))
 
 
 def rank_by_relevance(products, query):
@@ -169,7 +184,9 @@ def rank_by_relevance(products, query):
     """
     if not products:
         return products
-    scored = [(relevance_score(p.get("name"), query), i, p) for i, p in enumerate(products)]
+    query_tokens = _tokens(query)
+    scored = [(_score_tokens(p.get("name"), query_tokens), i, p)
+              for i, p in enumerate(products)]
     # If nothing matches textually the query is probably a synonym; leave as-is.
     if all(s == 0.0 for s, _, _ in scored):
         return products
@@ -317,6 +334,10 @@ JSON.stringify((function () {
 })())
 """
 
+# Interpolated once at import: the selector list never changes, and json.dumps
+# of it was being redone on every probe.
+_BLOCK_PROBE = _BLOCK_PROBE_JS % json.dumps(list(_BLOCK_SELECTORS))
+
 
 async def _page_looks_blocked(page):
     """True when the current document is a bot challenge rather than the site.
@@ -326,7 +347,7 @@ async def _page_looks_blocked(page):
     turns it into a permanent failure for that request.
     """
     try:
-        raw = await page.evaluate(_BLOCK_PROBE_JS % json.dumps(list(_BLOCK_SELECTORS)))
+        raw = await page.evaluate(_BLOCK_PROBE)
         info = json.loads(raw) if isinstance(raw, str) else raw
     except Exception:
         return False
@@ -380,6 +401,31 @@ BLOCKED_PATTERNS = [
 ]
 
 
+# Network.enable is idempotent to the browser but not free to us: it is a CDP
+# round trip, and every scrape asks for it two or three times over (once when
+# the tab is prepared for resource blocking, once per interception attempt, and
+# again on each retry). The domain stays enabled for the life of the tab, so
+# remember it there rather than re-sending.
+_NETWORK_ENABLED = "_quickcom_network_enabled"
+
+
+async def enable_network(page):
+    """Turn on Network domain events for this tab, at most once per tab."""
+    if getattr(page, _NETWORK_ENABLED, False):
+        return True
+    try:
+        await page.send(zd.cdp.network.enable())
+    except Exception:
+        return False
+    try:
+        setattr(page, _NETWORK_ENABLED, True)
+    except Exception:
+        # A page object that will not take attributes simply pays the round
+        # trip again; correctness does not depend on the memo.
+        pass
+    return True
+
+
 async def block_heavy_resources(page):
     """Stop the tab fetching bytes no scraper will ever look at.
 
@@ -388,12 +434,45 @@ async def block_heavy_resources(page):
     the command still works, just heavier.
     """
     try:
-        await page.send(zd.cdp.network.enable())
+        await enable_network(page)
         await page.send(zd.cdp.network.set_blocked_ur_ls(urls=BLOCKED_PATTERNS))
         return True
     except Exception as e:
         print(f"[common] resource blocking unavailable: {type(e).__name__}: {e}")
         return False
+
+
+# Used to tell "the grid has not arrived yet" from "there is no grid". A
+# server-rendered result page ships its cards in the HTML, so a document that
+# has finished loading without any is not going to grow some.
+_DOCUMENT_COMPLETE_JS = "document.readyState === 'complete'"
+
+# Poll schedule shared by the waiters below. Conditions that follow a
+# navigation are usually satisfied within a few tens of milliseconds, so the
+# first re-check happens quickly and the gap only grows towards the caller's
+# interval if the page really is slow.
+_POLL_START = 0.05
+_POLL_GROWTH = 1.6
+
+
+async def _poll(probe, timeout, interval):
+    """Await `probe()` until it returns something truthy, or time runs out.
+
+    Returns the truthy value, or None. Shared by the JS-predicate and
+    cookie waiters so both get the same fast-first, backing-off schedule.
+    """
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    delay = min(_POLL_START, interval)
+    while True:
+        found = await probe()
+        if found:
+            return found
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            return None
+        await asyncio.sleep(min(delay, remaining))
+        delay = min(delay * _POLL_GROWTH, interval)
 
 
 async def wait_for(page, predicate_js, timeout=6.0, interval=0.25):
@@ -402,18 +481,41 @@ async def wait_for(page, predicate_js, timeout=6.0, interval=0.25):
     Returns whether it became true. Preferable to a flat sleep in either
     direction: it continues as soon as the page is ready, and it keeps waiting
     when the page is slower than the guess baked into a fixed interval.
+
+    `interval` is the *ceiling* on the gap between polls, not the gap itself --
+    a condition that comes true just after the first check is not charged a
+    quarter-second for it.
     """
-    loop = asyncio.get_running_loop()
-    deadline = loop.time() + timeout
-    while True:
+    expression = f"!!({predicate_js})"
+
+    async def probe():
         try:
-            if await page.evaluate(f"!!({predicate_js})") is True:
-                return True
+            return await page.evaluate(expression) is True
         except Exception:
-            pass
-        if loop.time() >= deadline:
             return False
-        await asyncio.sleep(interval)
+
+    return await _poll(probe, timeout, interval) is True
+
+
+async def wait_for_cookie(page, name, *, timeout=2.0, urls=None):
+    """Wait for the browser to hold a cookie called `name`, and return it.
+
+    The condition several set_location flows are really waiting on: the cookie
+    the *server* sets in reply to a navigation, which a flat sleep can only
+    guess the arrival of. Returns None when it never turns up inside the
+    budget, which callers treat exactly as they treated the sleep expiring.
+    """
+    async def probe():
+        try:
+            cookies = await page.send(zd.cdp.network.get_cookies(urls=urls))
+        except Exception:
+            return None
+        for cookie in cookies or []:
+            if cookie.name == name:
+                return cookie
+        return None
+
+    return await _poll(probe, timeout, 0.25)
 
 
 async def _needs_warmup(page, origin):
@@ -428,11 +530,34 @@ async def _needs_warmup(page, origin):
     Falls back to warming up whenever we cannot tell, so the cheap path is only
     taken on positive evidence.
     """
-    try:
-        cookies = await page.send(zd.cdp.network.get_cookies(urls=[origin]))
-    except Exception:
+    cookies = await _origin_cookies(page, origin)
+    if cookies is None:
         return True
     return not cookies
+
+
+async def _origin_cookies(page, origin):
+    """Cookies the profile holds for `origin`, or None if CDP would not say."""
+    try:
+        return await page.send(zd.cdp.network.get_cookies(urls=[origin]))
+    except Exception:
+        return None
+
+
+async def _await_warmup(page, origin, ceiling):
+    """Wait out a warmup navigation, but only for as long as it needs.
+
+    The navigation exists to make the origin set its session and WAF cookies,
+    so their existence -- not a fixed sleep -- is the condition that ends it.
+    page.get() has already waited for the load to go quiet by the time we get
+    here, so on a healthy origin this returns on the first check; `ceiling` is
+    the old flat sleep, kept as the budget for an origin that is genuinely slow
+    to hand out a session.
+    """
+    async def probe():
+        return await _origin_cookies(page, origin)
+
+    return await _poll(probe, ceiling, 0.25) is not None
 
 
 async def intercept_json(
@@ -464,21 +589,29 @@ async def intercept_json(
     state = {"done": False, "blocked": False, "saw_api": False, "empty_at": None}
     targets = set()
     loop = asyncio.get_running_loop()
+    # Handlers announce every state change the wait below cares about, so the
+    # function returns the moment the payload is parsed. Polling for it instead
+    # cost up to a tenth of a second per attempt, and run_search may make two.
+    progress = asyncio.Event()
 
     async def on_response(event):
         if state["done"]:
             return
         url = event.response.url or ""
+        # `match` runs for every response the tab receives -- hundreds on these
+        # pages -- so ask it once and branch on the answer.
+        if not match(url):
+            return
         try:
             status = event.response.status
         except Exception:
             status = 200
-        if status in _BLOCK_STATUSES and match(url):
+        if status in _BLOCK_STATUSES:
             state["blocked"] = True
+            progress.set()
             return
-        if match(url):
-            state["saw_api"] = True
-            targets.add(event.request_id)
+        state["saw_api"] = True
+        targets.add(event.request_id)
 
     async def on_finished(event):
         if state["done"] or event.request_id not in targets:
@@ -500,20 +633,18 @@ async def intercept_json(
             collected.extend(items)
             state["done"] = True
         else:
-            # The API answered with nothing. Note when, so the wait loop can
+            # The API answered with nothing. Note when, so the wait below can
             # give up early instead of sitting out the full timeout on a query
             # that genuinely has no matches.
             state["empty_at"] = loop.time()
+        progress.set()
 
-    try:
-        await page.send(zd.cdp.network.enable())
-    except Exception:
-        pass
+    await enable_network(page)
 
     if warmup and await _needs_warmup(page, warmup):
         try:
             await page.get(warmup)
-            await asyncio.sleep(warmup_wait)
+            await _await_warmup(page, warmup, warmup_wait)
         except Exception:
             pass
 
@@ -535,14 +666,25 @@ async def intercept_json(
             pass
 
         deadline = loop.time() + timeout
-        while not state["done"] and loop.time() < deadline:
-            if state["blocked"]:
+        while True:
+            # Cleared before the state is read, never after: a handler firing
+            # in between sets it again, so a payload that lands while we are
+            # working out how long to wait cannot be missed.
+            progress.clear()
+            if state["done"] or state["blocked"]:
                 break
-            # Give a short grace period after an empty payload -- some sites
-            # send the grid in a second, paginated response.
-            if state["empty_at"] and loop.time() - state["empty_at"] > EMPTY_GRACE:
+            budget = deadline - loop.time()
+            if state["empty_at"] is not None:
+                # Give a short grace period after an empty payload -- some
+                # sites send the grid in a second, paginated response. Each
+                # empty answer restarts that clock, as the poll loop did.
+                budget = min(budget, state["empty_at"] + EMPTY_GRACE - loop.time())
+            if budget <= 0:
                 break
-            await asyncio.sleep(0.1)
+            try:
+                await asyncio.wait_for(progress.wait(), budget)
+            except asyncio.TimeoutError:
+                pass
     finally:
         page.remove_handlers(zd.cdp.network.ResponseReceived)
         page.remove_handlers(zd.cdp.network.LoadingFinished)
@@ -564,8 +706,8 @@ async def intercept_json(
     return ScrapeResult([], TIMEOUT, "Search API never responded.")
 
 
-async def scrape_dom(page, *, tag, navigate, extract, settle=6.0, settle_min=1.2,
-                     timeout=20.0):
+async def scrape_dom(page, *, tag, navigate, extract, card_count=None, settle=6.0,
+                     settle_min=1.2, timeout=20.0):
     """Load a server-rendered page and pull products out of its DOM.
 
     The counterpart to intercept_json for sites that ship HTML rather than
@@ -574,19 +716,22 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=6.0, settle_min=1.2
 
     `extract` is a JS expression evaluated in the page that must return a JSON
     string: an array of normalised product dicts.
+
+    `card_count` is an optional JS expression returning how many product cards
+    are currently rendered. Given one, the settle loop watches that number
+    instead of re-running `extract`, and the full extraction happens once, when
+    the grid has stopped growing.
     """
     loop = asyncio.get_running_loop()
-    try:
-        await page.send(zd.cdp.network.enable())
-    except Exception:
-        pass
+    await enable_network(page)
 
     status = {"code": None}
+    document_url = navigate.split("?")[0]
 
     async def on_response(event):
         # Only the top-level document status tells us we were turned away.
         url = event.response.url or ""
-        if url.split("?")[0] == navigate.split("?")[0]:
+        if url.split("?")[0] == document_url:
             try:
                 status["code"] = event.response.status
             except Exception:
@@ -614,18 +759,60 @@ async def scrape_dom(page, *, tag, navigate, extract, settle=6.0, settle_min=1.2
         # settle_min stops us accepting an early plateau: rendering pauses, so
         # two equal readings a moment apart is not proof the grid is complete.
         floor = started + settle_min
-        while True:
+
+        async def pull_items():
+            nonlocal last_error
             try:
                 raw = await page.evaluate(extract)
-                items = json.loads(raw) if isinstance(raw, str) else (raw or [])
+                return json.loads(raw) if isinstance(raw, str) else (raw or [])
             except Exception as e:
-                last_error, items = e, []
+                last_error = e
+                return []
+
+        async def probe_count():
+            """How many cards are rendered, or None if we cannot count cheaply.
+
+            Detecting stabilisation with `extract` means building and
+            serialising the whole product array across CDP on every poll --
+            twenty times over a slow Amazon scrape -- to learn one number.
+            Falling back to it when the count expression fails keeps the
+            behaviour of a page that will not answer the cheap question.
+            """
+            if not card_count:
+                return None
+            try:
+                value = await page.evaluate(card_count)
+            except Exception:
+                return None
+            return value if isinstance(value, (int, float)) else None
+
+        async def document_complete():
+            try:
+                return await page.evaluate(_DOCUMENT_COMPLETE_JS) is True
+            except Exception:
+                return False
+
+        while True:
+            fresh = False
+            count = await probe_count()
+            if count is None:
+                items = await pull_items()
+                count, fresh = len(items), True
             now = loop.time()
-            if items and len(items) == previous and now >= floor:
+            settled = count > 0 and count == previous and now >= floor
+            expired = now >= deadline
+            if (settled or expired) and not fresh:
+                items = await pull_items()
+            if expired or (settled and items):
                 break
-            if now >= deadline:
+            # Two empty readings past the floor on a document that has finished
+            # loading is a page with no results, not a page still filling in.
+            # Sitting out the rest of the settle budget on that is what made an
+            # empty Amazon grocery search cost six seconds before the widened
+            # retry it always needs next could even start.
+            if count == 0 and previous == 0 and now >= floor and await document_complete():
                 break
-            previous = len(items)
+            previous = count
             await asyncio.sleep(0.3)
     finally:
         page.remove_handlers(zd.cdp.network.ResponseReceived)

@@ -1,5 +1,4 @@
 import urllib.parse
-import asyncio
 import json
 import re
 
@@ -62,7 +61,15 @@ async def set_location(page, location):
         # Best effort navigation to establish session on domain
         try:
             await page.get("https://blinkit.com/")
-            await asyncio.sleep(1)
+            # The localStorage write below only lands on the right origin once
+            # Blinkit's own document is the one in the tab, which is all this
+            # ever waited for -- so wait for that, with the old second as the
+            # ceiling rather than the price.
+            await common.wait_for(
+                page,
+                "location.hostname.indexOf('blinkit.com') !== -1 && !!window.localStorage",
+                timeout=1.0,
+            )
             # Inject localStorage keys
             location_obj = {
                 "coords": {"lat": lat, "lon": lon},

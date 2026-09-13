@@ -1,24 +1,10 @@
 import urllib.parse
-import asyncio
 import json
 import re
-import time
 
 import zendriver as zd
 
 from . import common
-
-async def wait_for_selector(page, selector, timeout=10):
-    start = time.time()
-    while time.time() - start < timeout:
-        try:
-            elem = await page.select(selector)
-            if elem:
-                return elem
-        except Exception:
-            pass
-        await asyncio.sleep(0.5)
-    return None
 
 # JioMart keeps the delivery location in two cookies plus a localStorage key.
 # Setting them directly is both faster and more reliable than driving the
