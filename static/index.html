@@ -315,6 +315,7 @@
         function resetLocation() {
             isLocationSet = false;
             POOLS = {};
+            searchDone = true;
             $('location-section').style.display = 'block';
             $('status-container').style.display = 'none';
             $('results-container').style.display = 'none';
@@ -340,6 +341,11 @@
         let POOLS = {};          // svc -> { pool, status, message }
         let searchSeq = 0;       // guards against a stale stream finishing late
         let activeStream = null;
+        // Whether the current search has stopped producing columns. A column
+        // with no entry is still being scraped until this is set; after it, the
+        // platform is one we never heard back from, and saying so beats leaving
+        // a placeholder pulsing forever.
+        let searchDone = true;
 
         function hasResults() {
             return Object.keys(POOLS).length > 0;
@@ -373,6 +379,7 @@
             const seq = ++searchSeq;
             stopStream();
             POOLS = {};
+            searchDone = false;
 
             setInputsDisabled(true, true);
             $('loading-overlay').style.display = 'block';
@@ -386,6 +393,7 @@
 
             const finish = () => {
                 if(seq !== searchSeq) return;
+                searchDone = true;
                 stopStream();
                 $('loading-overlay').style.display = 'none';
                 setInputsDisabled(true, false);
@@ -511,8 +519,15 @@
                 : `<div class="brand-badge bg-${escapeHTML(svc)}">${escapeHTML(DISPLAY_NAMES[svc] || svc)}</div>`;
 
             if(!entry) {
-                return `<div class="vendor-header">${brand}<div class="vendor-count pending">Searching…</div></div>`
-                     + `<div class="skeleton"></div><div class="skeleton"></div>`;
+                if(!searchDone) {
+                    return `<div class="vendor-header">${brand}<div class="vendor-count pending">Searching…</div></div>`
+                         + `<div class="skeleton"></div><div class="skeleton"></div>`;
+                }
+                // The search ended without this platform ever reporting -- the
+                // stream dropped, or the request failed part way through.
+                return `<div class="vendor-header">${brand}`
+                     + `<div class="vendor-count warn">${STATUS_LABEL.error}</div></div>`
+                     + statusNoteHTML(svc, 'error');
             }
 
             const { sort, minDiscount } = currentView();
